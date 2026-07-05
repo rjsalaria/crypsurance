@@ -1,26 +1,35 @@
-export default function Logo({ className = "h-8 w-8" }: { className?: string }) {
+export default function Logo({
+  className = "h-8 w-8",
+  idPrefix = "lg",
+}: {
+  className?: string;
+  idPrefix?: string;
+}) {
+  const g = `${idPrefix}-grad`;
   return (
     <svg viewBox="0 0 64 64" className={className} aria-hidden="true">
       <defs>
-        <linearGradient id="logo-g" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#22d3ee" />
-          <stop offset="0.5" stopColor="#8b5cf6" />
-          <stop offset="1" stopColor="#e879f9" />
+        <linearGradient id={g} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#2f7fe0" />
+          <stop offset="0.5" stopColor="#19b8e8" />
+          <stop offset="1" stopColor="#2ee5e0" />
         </linearGradient>
       </defs>
+      {/* angular shield */}
       <path
-        d="M32 8 L54 17 V33 C54 46 44.5 54.5 32 58 C19.5 54.5 10 46 10 33 V17 Z"
+        d="M32 3 L57 15.5 V34 C57 46.5 46.5 55.8 32 61 C17.5 55.8 7 46.5 7 34 V15.5 Z"
         fill="none"
-        stroke="url(#logo-g)"
-        strokeWidth="4"
-        strokeLinejoin="round"
+        stroke={`url(#${g})`}
+        strokeWidth="5"
+        strokeLinejoin="miter"
       />
+      {/* hexagonal S monogram */}
       <path
-        d="M40 24 C38 21.5 35 20.5 32.5 20.5 C27.5 20.5 24.5 23.5 24.5 27 C24.5 35 40 31.5 40 38.5 C40 42.5 36.5 45 32 45 C28.5 45 25.5 43.5 23.5 41"
+        d="M45.5 20.5 H27.5 L21.5 26 V29 L26.5 33.5 H38 L43 38 V41.5 L37.5 46.5 H18.5"
         fill="none"
-        stroke="url(#logo-g)"
-        strokeWidth="4"
-        strokeLinecap="round"
+        stroke={`url(#${g})`}
+        strokeWidth="6"
+        strokeLinejoin="miter"
       />
     </svg>
   );

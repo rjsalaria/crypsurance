@@ -155,33 +155,44 @@ export default function Home() {
 
       {/* ================= HERO ================= */}
       <section className="relative pt-40 pb-24 px-4 sm:px-6">
-        <div className="mx-auto max-w-6xl text-center">
-          <p className="inline-block glass-card px-4 py-1.5 text-xs font-semibold tracking-wide text-cyan-neon animate-fade-up">
-            89% of crypto holders are uninsured — a $1T+ protection gap
-          </p>
-          <h1 className="mt-8 font-display text-5xl sm:text-6xl md:text-7xl font-bold leading-[1.05] tracking-tight animate-fade-up">
-            Insurance for the
-            <br />
-            <span className="text-gradient">on-chain world.</span>
-          </h1>
-          <p className="mt-6 mx-auto max-w-2xl text-lg text-muted leading-relaxed animate-fade-up">
-            CrypSurance replaces paperwork, adjusters and 90-day waits with
-            smart contracts, oracle verification and instant payouts. Fair,
-            fast and secure coverage — owned by its community.
-          </p>
-          <div className="mt-10 flex flex-wrap justify-center gap-4 animate-fade-up">
-            <Link
-              href="/app"
-              className="btn-gradient px-8 py-3.5 rounded-2xl font-display font-bold text-white"
-            >
-              Launch App
-            </Link>
-            <a
-              href="/whitepaper.pdf"
-              className="px-8 py-3.5 rounded-2xl font-display font-bold border border-muted/30 hover:border-cyan-neon/60 hover:text-cyan-neon transition-colors"
-            >
-              Read Whitepaper
-            </a>
+        <div className="mx-auto max-w-6xl grid items-center gap-12 lg:grid-cols-[1.15fr_0.85fr]">
+          <div className="text-center lg:text-left order-2 lg:order-1">
+            <p className="inline-block glass-card px-4 py-1.5 text-xs font-semibold tracking-wide text-cyan-neon animate-fade-up">
+              89% of crypto holders are uninsured — a $1T+ protection gap
+            </p>
+            <h1 className="mt-8 font-display text-5xl sm:text-6xl md:text-7xl font-bold leading-[1.05] tracking-tight animate-fade-up">
+              Insurance for the
+              <br />
+              <span className="text-gradient">on-chain world.</span>
+            </h1>
+            <p className="mt-6 mx-auto lg:mx-0 max-w-2xl text-lg text-muted leading-relaxed animate-fade-up">
+              CrypSurance replaces paperwork, adjusters and 90-day waits with
+              smart contracts, oracle verification and instant payouts. Fair,
+              fast and secure coverage — owned by its community.
+            </p>
+            <div className="mt-10 flex flex-wrap justify-center lg:justify-start gap-4 animate-fade-up">
+              <Link
+                href="/app"
+                className="btn-gradient px-8 py-3.5 rounded-2xl font-display font-bold text-white"
+              >
+                Launch App
+              </Link>
+              <a
+                href="/whitepaper.pdf"
+                className="px-8 py-3.5 rounded-2xl font-display font-bold border border-muted/30 hover:border-cyan-neon/60 hover:text-cyan-neon transition-colors"
+              >
+                Read Whitepaper
+              </a>
+            </div>
+          </div>
+          <div className="order-1 lg:order-2 flex justify-center [perspective:1200px]">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/logo.png"
+              alt="CrypSurance shield logo"
+              className="h-52 w-52 sm:h-72 sm:w-72 lg:h-85 lg:w-85 animate-spin-glow select-none"
+              draggable={false}
+            />
           </div>
         </div>
 

@@ -7,7 +7,7 @@ export default function Footer() {
       <div className="mx-auto max-w-6xl px-4 sm:px-6 py-14 grid gap-10 md:grid-cols-4">
         <div className="md:col-span-2">
           <div className="flex items-center gap-2.5">
-            <Logo className="h-8 w-8" />
+            <Logo className="h-8 w-8" idPrefix="ft" />
             <span className="font-display text-lg font-bold">
               Cryp<span className="text-gradient">Surance</span>
             </span>

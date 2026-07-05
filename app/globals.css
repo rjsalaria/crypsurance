@@ -140,6 +140,35 @@ h4,
   animation: marquee 30s linear infinite;
 }
 
+/* ---------- hero logo spin + glow ---------- */
+
+@keyframes spin-glow {
+  0% {
+    transform: rotateY(0deg);
+    filter: drop-shadow(0 0 22px rgba(34, 211, 238, 0.5));
+  }
+  25% {
+    filter: drop-shadow(0 0 48px rgba(34, 211, 238, 0.9));
+  }
+  50% {
+    transform: rotateY(180deg);
+    filter: drop-shadow(0 0 22px rgba(139, 92, 246, 0.6));
+  }
+  75% {
+    filter: drop-shadow(0 0 48px rgba(34, 211, 238, 0.9));
+  }
+  100% {
+    transform: rotateY(360deg);
+    filter: drop-shadow(0 0 22px rgba(34, 211, 238, 0.5));
+  }
+}
+
+.animate-spin-glow {
+  animation: spin-glow 9s linear infinite;
+  transform-style: preserve-3d;
+  will-change: transform, filter;
+}
+
 /* ---------- fade-up reveal ---------- */
 
 @keyframes fade-up {

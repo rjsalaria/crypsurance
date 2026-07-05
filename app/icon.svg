@@ -1,12 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
   <defs>
     <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#22d3ee"/>
-      <stop offset="0.5" stop-color="#8b5cf6"/>
-      <stop offset="1" stop-color="#e879f9"/>
+      <stop offset="0" stop-color="#2f7fe0"/>
+      <stop offset="0.5" stop-color="#19b8e8"/>
+      <stop offset="1" stop-color="#2ee5e0"/>
     </linearGradient>
   </defs>
   <rect width="64" height="64" rx="14" fill="#060312"/>
-  <path d="M32 8 L54 17 V33 C54 46 44.5 54.5 32 58 C19.5 54.5 10 46 10 33 V17 Z" fill="none" stroke="url(#g)" stroke-width="4" stroke-linejoin="round"/>
-  <path d="M40 24 C38 21.5 35 20.5 32.5 20.5 C27.5 20.5 24.5 23.5 24.5 27 C24.5 35 40 31.5 40 38.5 C40 42.5 36.5 45 32 45 C28.5 45 25.5 43.5 23.5 41" fill="none" stroke="url(#g)" stroke-width="4" stroke-linecap="round"/>
+  <path d="M32 6 L54 17 V33 C54 44 45 52 32 56.5 C19 52 10 44 10 33 V17 Z" fill="none" stroke="url(#g)" stroke-width="4.5" stroke-linejoin="miter"/>
+  <path d="M43.5 21.5 H28.5 L23.5 26 V28.5 L27.5 32.5 H37.5 L41.5 36.5 V39.5 L37 43.5 H20.5" fill="none" stroke="url(#g)" stroke-width="5" stroke-linejoin="miter"/>
 </svg>

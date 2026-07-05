@@ -19,7 +19,7 @@ export default function Navbar() {
       <nav className="mx-auto max-w-6xl px-4 sm:px-6">
         <div className="mt-3 glass-card !rounded-2xl flex items-center justify-between px-4 py-3">
           <Link href="/" className="flex items-center gap-2.5" aria-label="CrypSurance home">
-            <Logo className="h-8 w-8" />
+            <Logo className="h-8 w-8" idPrefix="nav" />
             <span className="font-display text-lg font-bold tracking-tight">
               Cryp<span className="text-gradient">Surance</span>
             </span>
