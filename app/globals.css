@@ -1,26 +1,192 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+@theme {
+  --color-void: #060312;
+  --color-abyss: #0b0620;
+  --color-surface: #120a2e;
+  --color-ink: #eae6ff;
+  --color-muted: #a89fd0;
+  --color-violet-neon: #8b5cf6;
+  --color-cyan-neon: #22d3ee;
+  --color-magenta-neon: #e879f9;
+  --color-lime-neon: #a3e635;
+  --font-display: var(--font-space-grotesk);
+  --font-sans: var(--font-inter);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-void);
+  color: var(--color-ink);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  overflow-x: hidden;
+}
+
+h1,
+h2,
+h3,
+h4,
+.font-display {
+  font-family: var(--font-display), system-ui, sans-serif;
+}
+
+::selection {
+  background: var(--color-violet-neon);
+  color: white;
+}
+
+/* ---------- glass + glow ---------- */
+
+.glass-card {
+  background: linear-gradient(
+    145deg,
+    rgba(139, 92, 246, 0.09),
+    rgba(34, 211, 238, 0.05) 55%,
+    rgba(232, 121, 249, 0.06)
+  );
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(168, 159, 208, 0.18);
+  border-radius: 1.25rem;
+}
+
+.glass-card-hover {
+  transition: transform 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.glass-card-hover:hover {
+  transform: translateY(-4px);
+  border-color: rgba(139, 92, 246, 0.55);
+  box-shadow: 0 0 40px rgba(139, 92, 246, 0.25);
+}
+
+.text-gradient {
+  background: linear-gradient(
+    92deg,
+    var(--color-cyan-neon),
+    var(--color-violet-neon) 45%,
+    var(--color-magenta-neon)
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.btn-gradient {
+  background: linear-gradient(
+    92deg,
+    var(--color-violet-neon),
+    var(--color-magenta-neon)
+  );
+  box-shadow: 0 0 24px rgba(139, 92, 246, 0.45);
+  transition: box-shadow 0.3s ease, transform 0.2s ease;
+}
+
+.btn-gradient:hover {
+  box-shadow: 0 0 44px rgba(232, 121, 249, 0.6);
+  transform: translateY(-1px);
+}
+
+.ring-glow {
+  box-shadow: 0 0 60px rgba(34, 211, 238, 0.18);
+}
+
+/* ---------- animated blobs ---------- */
+
+@keyframes blob-drift {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(60px, -50px) scale(1.15);
+  }
+  66% {
+    transform: translate(-40px, 40px) scale(0.9);
+  }
+}
+
+.blob {
+  position: absolute;
+  border-radius: 9999px;
+  opacity: 0.55;
+  animation: blob-drift 18s ease-in-out infinite;
+  pointer-events: none;
+  will-change: transform;
+}
+
+/* ---------- grid overlay ---------- */
+
+.grid-overlay {
+  background-image: linear-gradient(
+      rgba(168, 159, 208, 0.06) 1px,
+      transparent 1px
+    ),
+    linear-gradient(90deg, rgba(168, 159, 208, 0.06) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 40%, transparent 100%);
+}
+
+/* ---------- marquee ---------- */
+
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee {
+  animation: marquee 30s linear infinite;
+}
+
+/* ---------- fade-up reveal ---------- */
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.8s ease both;
+}
+
+/* ---------- pulse ring on step icons ---------- */
+
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.45);
+  }
+  100% {
+    box-shadow: 0 0 0 18px rgba(34, 211, 238, 0);
+  }
+}
+
+.pulse-ring {
+  animation: pulse-ring 2s ease-out infinite;
+}
+
+/* ---------- FAQ accordion ---------- */
+
+details.faq summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+details.faq summary::-webkit-details-marker {
+  display: none;
+}
+
+details.faq summary .chevron {
+  transition: transform 0.25s ease;
+}
+
+details.faq[open] summary .chevron {
+  transform: rotate(45deg);
 }
