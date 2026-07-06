@@ -220,7 +220,7 @@ story += [
     P("<b>Life (second phase).</b> Smart-contract life coverage with beneficiaries written into the policy. "
       "Payout executes on oracle-verified proof of death where compliant registry oracles are available. "
       "Rollout is jurisdiction-by-jurisdiction, gated on regulatory clarity."),
-    P("Premiums are payable in stablecoins or BNB. SURE holders receive a <b>15% premium discount</b>, "
+    P("Premiums are payable in stablecoins or SOL. SURE holders receive a <b>15% premium discount</b>, "
       "already implemented in the protocol's coverage calculator."),
 ]
 
@@ -235,8 +235,9 @@ story += bullets([
     "<b>Utility</b> — 15% premium discount and priority access to new products for holders.",
 ])
 story += [
-    P("<b>Token standard:</b> BEP-20 on BNB Chain (OpenZeppelin implementation, externally audited). "
-      "<b>Total supply:</b> 1,000,000,000 SURE — fixed, no mint function."),
+    P("<b>Token standard:</b> SPL token on Solana with Metaplex metadata. "
+      "<b>Total supply:</b> 1,000,000,000 SURE — fixed: the mint authority is revoked at creation, "
+      "so no further tokens can ever be created. Protocol programs are built with Anchor and externally audited."),
     Spacer(1, 6),
     P("Token distribution", "h2"),
     donut(),
@@ -249,7 +250,7 @@ story.append(styled_table(
         ["Underwriting & staking rewards", "30%", "300M", "Emitted over 36–48 months, proportional to pool participation"],
         ["Presale", "20%", "200M", "40% at TGE, remainder linear over 3 months"],
         ["Community & ecosystem", "15%", "150M", "Testnet rewards, airdrops, referrals — released by governance"],
-        ["DEX liquidity", "13%", "130M", "Paired with ~65% of raise; LP locked 24 months (PinkLock)"],
+        ["DEX liquidity", "13%", "130M", "Paired with ~65% of raise; LP locked 24 months (Streamflow)"],
         ["Team", "12%", "120M", "12-month cliff, then 30-month linear vest. Zero at TGE"],
         ["Treasury", "10%", "100M", "3-of-5 multisig, address published at TGE"],
     ],
@@ -261,11 +262,11 @@ story += section("06 · Presale", "A raise sized to be filled, not flaunted")
 story.append(styled_table(
     ["Parameter", "Value"],
     [
-        ["Chain / platform", "BNB Chain via PinkSale launchpad"],
+        ["Chain / platform", "Solana via PinkSale launchpad"],
         ["Soft cap / hard cap", "$150,000 / $250,000"],
         ["Presale price", "$0.00125 per SURE (200M tokens ÷ $250k hard cap)"],
         ["Listing price", "$0.0014 per SURE (+12% over presale)"],
-        ["Listing venue", "PancakeSwap — ~65% of raise into LP, locked 24 months"],
+        ["Listing venue", "Raydium — ~65% of raise into LP, locked 24 months"],
         ["Anti-whale", "Maximum buy 2% of hard cap per wallet"],
         ["Unsold tokens", "Burned"],
         ["Fully diluted valuation at listing", "$1.4M"],
@@ -299,7 +300,7 @@ story.append(styled_table(
     ["Quarter", "Milestone", "Detail"],
     [
         ["Q3 2026", "Testnet", "Coverage calculator, mock policies and staking simulation live (already deployed at crypsurance.io/app)"],
-        ["Q4 2026", "Audits + presale", "Independent contract audits, legal opinion, KYC, PinkSale presale, PancakeSwap listing"],
+        ["Q4 2026", "Audits + presale", "Independent program audits, legal opinion, KYC, PinkSale presale, Raydium listing"],
         ["Q1 2027", "Mainnet", "Parametric non-life products live; staking pools open; governance phase 1"],
         ["Q2 2027", "Expansion", "Life products (first jurisdictions), multi-chain deployment, institutional underwriting partners"],
     ],
