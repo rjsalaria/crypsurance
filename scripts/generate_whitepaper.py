@@ -56,27 +56,6 @@ def section(eyebrow, title):
     return [P(eyebrow.upper(), "eyebrow"), P(title, "h1")]
 
 # ---------- page furniture ----------
-def draw_shield(c, cx, cy, size, stroke, width=3):
-    """Simplified CrypSurance shield + S mark."""
-    c.saveState()
-    c.setStrokeColor(stroke)
-    c.setLineWidth(width)
-    c.setLineJoin(1)
-    s = size / 64.0
-    p = c.beginPath()
-    p.moveTo(cx + (32 - 32) * s, cy + (32 - 8) * s)
-    p.lineTo(cx + (54 - 32) * s, cy + (32 - 17) * s)
-    p.lineTo(cx + (54 - 32) * s, cy + (32 - 33) * s)
-    p.curveTo(cx + (54 - 32) * s, cy + (32 - 46) * s, cx + (44.5 - 32) * s, cy + (32 - 54.5) * s, cx, cy + (32 - 58) * s)
-    p.curveTo(cx + (19.5 - 32) * s, cy + (32 - 54.5) * s, cx + (10 - 32) * s, cy + (32 - 46) * s, cx + (10 - 32) * s, cy + (32 - 33) * s)
-    p.lineTo(cx + (10 - 32) * s, cy + (32 - 17) * s)
-    p.close()
-    c.drawPath(p, stroke=1, fill=0)
-    c.setFont("Helvetica-Bold", size * 0.42)
-    c.setFillColor(stroke)
-    c.drawCentredString(cx, cy - size * 0.17, "S")
-    c.restoreState()
-
 def cover_page(c, doc):
     c.saveState()
     c.setFillColor(VOID)
@@ -90,7 +69,17 @@ def cover_page(c, doc):
     for i, col in enumerate([CYAN, VIOLET, MAGENTA]):
         c.setFillColor(col)
         c.rect(PAGE_W * 0.12 + i * 40 * mm / 3 * 2.2, bar_y, 28 * mm, 1.2 * mm, stroke=0, fill=1)
-    draw_shield(c, PAGE_W * 0.5, PAGE_H * 0.74, 110, VIOLET, 4)
+    # official brand mark (transparent PNG)
+    logo = os.path.join(os.path.dirname(__file__), "..", "public", "logo.png")
+    logo_size = 130
+    c.drawImage(
+        logo,
+        PAGE_W / 2 - logo_size / 2,
+        PAGE_H * 0.665,
+        logo_size,
+        logo_size,
+        mask="auto",
+    )
     c.setFillColor(colors.white)
     c.setFont("Helvetica-Bold", 34)
     c.drawCentredString(PAGE_W / 2, PAGE_H * 0.585, "CrypSurance")
