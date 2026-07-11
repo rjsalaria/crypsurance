@@ -16,25 +16,20 @@
 require("dotenv").config();
 const fs = require("fs");
 const bs58 = require("bs58");
-const { createUmi } = require("@metaplex-foundation/umi-bundle-defaults");
+const { Connection, Keypair, PublicKey } = require("@solana/web3.js");
 const {
-  keypairIdentity,
-  generateSigner,
-  percentAmount,
-  none,
-} = require("@metaplex-foundation/umi");
+  getOrCreateAssociatedTokenAccount,
+  mintTo,
+  setAuthority,
+  AuthorityType,
+  getMint,
+} = require("@solana/spl-token");
+const { createUmi } = require("@metaplex-foundation/umi-bundle-defaults");
+const { keypairIdentity, generateSigner, percentAmount } = require("@metaplex-foundation/umi");
 const {
   mplTokenMetadata,
   createFungible,
-  mintV1,
-  TokenStandard,
 } = require("@metaplex-foundation/mpl-token-metadata");
-const {
-  mplToolbox,
-  setAuthority,
-  AuthorityType,
-  findAssociatedTokenPda,
-} = require("@metaplex-foundation/mpl-toolbox");
 
 const CLUSTER = process.argv[2] || "devnet";
 const RPC =
@@ -63,18 +58,26 @@ function loadSecretKey() {
 }
 
 async function main() {
-  const umi = createUmi(RPC).use(mplTokenMetadata()).use(mplToolbox());
-  const kp = umi.eddsa.createKeypairFromSecretKey(loadSecretKey());
-  umi.use(keypairIdentity(kp));
+  const secret = loadSecretKey();
 
-  console.log(`Cluster: ${CLUSTER} (${RPC})`);
-  console.log(`Wallet:  ${kp.publicKey}`);
+  // umi handles mint + metadata creation (Metaplex standard)
+  const umi = createUmi(RPC).use(mplTokenMetadata());
+  const umiKp = umi.eddsa.createKeypairFromSecretKey(secret);
+  umi.use(keypairIdentity(umiKp));
+
+  // web3.js + spl-token handle supply mint and authority revocation
+  const conn = new Connection(RPC, "confirmed");
+  const payer = Keypair.fromSecretKey(secret);
+
+  console.log(`Cluster: ${CLUSTER}`);
+  console.log(`Wallet:  ${payer.publicKey.toBase58()}`);
 
   const mint = generateSigner(umi);
-  console.log(`Mint:    ${mint.publicKey}`);
+  const mintPk = new PublicKey(mint.publicKey);
+  console.log(`Mint:    ${mintPk.toBase58()}`);
 
   // 1. create mint + metadata
-  console.log("\n[1/3] Creating mint + metadata…");
+  console.log("\n[1/4] Creating mint + metadata…");
   await createFungible(umi, {
     mint,
     name: "CrypSurance",
@@ -85,35 +88,51 @@ async function main() {
   }).sendAndConfirm(umi);
 
   // 2. mint full fixed supply to our wallet
-  console.log("[2/3] Minting 1,000,000,000 SURE…");
-  await mintV1(umi, {
-    mint: mint.publicKey,
-    amount: SUPPLY,
-    tokenOwner: umi.identity.publicKey,
-    tokenStandard: TokenStandard.Fungible,
-  }).sendAndConfirm(umi);
+  console.log("[2/4] Minting 1,000,000,000 SURE…");
+  const ata = await getOrCreateAssociatedTokenAccount(
+    conn,
+    payer,
+    mintPk,
+    payer.publicKey
+  );
+  await mintTo(conn, payer, mintPk, ata.address, payer, SUPPLY);
 
   // 3. revoke mint authority => supply is fixed forever
-  //    (freeze authority is already None for createFungible mints)
-  console.log("[3/3] Revoking mint authority (fixed supply)…");
-  await setAuthority(umi, {
-    owned: mint.publicKey,
-    owner: umi.identity,
-    authorityType: AuthorityType.MintTokens,
-    newAuthority: none(),
-  }).sendAndConfirm(umi);
+  console.log("[3/4] Revoking mint authority (fixed supply)…");
+  await setAuthority(
+    conn,
+    payer,
+    mintPk,
+    payer,
+    AuthorityType.MintTokens,
+    null
+  );
 
-  const ata = findAssociatedTokenPda(umi, {
-    mint: mint.publicKey,
-    owner: umi.identity.publicKey,
-  });
+  // 4. revoke freeze authority if present => no one can freeze holders
+  const info = await getMint(conn, mintPk);
+  if (info.freezeAuthority) {
+    console.log("[4/4] Revoking freeze authority…");
+    await setAuthority(
+      conn,
+      payer,
+      mintPk,
+      payer,
+      AuthorityType.FreezeAccount,
+      null
+    );
+  } else {
+    console.log("[4/4] Freeze authority already none ✓");
+  }
 
+  const finalInfo = await getMint(conn, mintPk);
   console.log("\n=== SURE token created ===");
-  console.log(`Mint address:   ${mint.publicKey}`);
-  console.log(`Token account:  ${ata[0]}`);
-  console.log(`Supply:         1,000,000,000 SURE (fixed — mint authority revoked)`);
+  console.log(`Mint address:     ${mintPk.toBase58()}`);
+  console.log(`Token account:    ${ata.address.toBase58()}`);
+  console.log(`Supply:           ${(finalInfo.supply / 10n ** 9n).toLocaleString()} SURE`);
+  console.log(`Mint authority:   ${finalInfo.mintAuthority ?? "none (revoked ✓)"}`);
+  console.log(`Freeze authority: ${finalInfo.freezeAuthority ?? "none ✓"}`);
   console.log(
-    `Explorer:       https://explorer.solana.com/address/${mint.publicKey}?cluster=${CLUSTER === "mainnet-beta" ? "mainnet" : CLUSTER}`
+    `Explorer:         https://explorer.solana.com/address/${mintPk.toBase58()}?cluster=${CLUSTER === "mainnet-beta" ? "mainnet" : CLUSTER}`
   );
 }
 
