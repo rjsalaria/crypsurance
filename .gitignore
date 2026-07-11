@@ -24,6 +24,9 @@
 *.zip
 /crypsurance-site/
 
+# personal launch archive (old site versions, drafts, media)
+/Token Launch/
+
 # misc
 .DS_Store
 *.pem

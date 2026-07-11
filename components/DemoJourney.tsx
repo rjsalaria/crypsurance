@@ -9,22 +9,44 @@ import { useMemo, useState } from "react";
 const DEMO_ADDRESS = "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU";
 const short = (a: string) => `${a.slice(0, 4)}…${a.slice(-4)}`;
 
-type PlanId = "term" | "rop" | "travel";
+type Billing = "monthly" | "yearly" | "once";
 
-const plans: {
-  id: PlanId;
+type Plan = {
+  id: string;
   name: string;
   tagline: string;
   plain: string;
   icon: string;
-}[] = [
+  billing: Billing;
+  hasTerm: boolean; // show the years slider (life products)
+  usesNominee: boolean; // nominee step applies
+  rate: number; // premium factor on coverage
+  ropRefund: boolean; // return-of-premium at maturity
+  covMin: number;
+  covMax: number;
+  covStep: number;
+  covDefault: number;
+  covLabel: string;
+  benefit: (cov: string) => string; // main "you get" bullet
+};
+
+const plans: Plan[] = [
   {
     id: "term",
     name: "Term Life",
     tagline: "Maximum protection, minimum cost",
     plain:
-      "You pay a small amount monthly. If the worst happens during the term, the person you nominate automatically receives the full cover amount. Like a safety net for your family.",
+      "You pay a small amount monthly. If the worst happens during the term, the person you nominate automatically receives the full cover amount. A safety net for your family.",
     icon: "M12 3l8 4v5c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V7l8-4z",
+    billing: "monthly",
+    hasTerm: true,
+    usesNominee: true,
+    rate: 0.00042,
+    ropRefund: false,
+    covMin: 10000, covMax: 250000, covStep: 5000, covDefault: 50000,
+    covLabel: "Cover amount (what your family receives)",
+    benefit: (cov) =>
+      `<b>$${cov} paid to your nominee</b> automatically if the covered event happens — within minutes, no paperwork for your family`,
   },
   {
     id: "rop",
@@ -33,37 +55,111 @@ const plans: {
     plain:
       "Same protection as Term Life — but if nothing happens by the end of the term, you get 100% of everything you paid back. Protection that costs you nothing if you never need it.",
     icon: "M3 12a9 9 0 1018 0 9 9 0 00-18 0zM12 7v5l3 3",
+    billing: "monthly",
+    hasTerm: true,
+    usesNominee: true,
+    rate: 0.00042 * 1.65,
+    ropRefund: true,
+    covMin: 10000, covMax: 250000, covStep: 5000, covDefault: 50000,
+    covLabel: "Cover amount (what your family receives)",
+    benefit: (cov) =>
+      `<b>$${cov} paid to your nominee</b> automatically if the covered event happens — within minutes, no paperwork for your family`,
+  },
+  {
+    id: "health",
+    name: "Health",
+    tagline: "Hospital bills, handled",
+    plain:
+      "A monthly subscription that covers hospitalization costs. Verified bills are settled to your wallet in minutes — no cashless-desk queues, no discharge-day battles.",
+    icon: "M12 21C7 16.5 3 13 3 8.8 3 6 5.2 4 7.8 4c1.6 0 3.2.8 4.2 2.2C13 4.8 14.6 4 16.2 4 18.8 4 21 6 21 8.8c0 4.2-4 7.7-9 12.2z",
+    billing: "monthly",
+    hasTerm: false,
+    usesNominee: false,
+    rate: 0.0009,
+    ropRefund: false,
+    covMin: 10000, covMax: 500000, covStep: 10000, covDefault: 100000,
+    covLabel: "Hospitalization cover per year",
+    benefit: (cov) =>
+      `Hospital bills covered up to <b>$${cov} per year</b> — verified and settled to your wallet in minutes`,
+  },
+  {
+    id: "accident",
+    name: "Accident",
+    tagline: "Big protection, tiny premium",
+    plain:
+      "Personal accident cover for pocket change. If an accident leaves you disabled, you get paid. In the worst case, your nominee does — automatically.",
+    icon: "M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0zM12 9v4M12 17h.01",
+    billing: "monthly",
+    hasTerm: false,
+    usesNominee: true,
+    rate: 0.00012,
+    ropRefund: false,
+    covMin: 10000, covMax: 500000, covStep: 10000, covDefault: 100000,
+    covLabel: "Accident cover amount",
+    benefit: (cov) =>
+      `Up to <b>$${cov} paid to you</b> if an accident leaves you disabled — and to your nominee in the worst case`,
+  },
+  {
+    id: "vehicle",
+    name: "Vehicle",
+    tagline: "Your car, covered by code",
+    plain:
+      "Yearly cover for accident damage and theft. Claims are verified with oracle data and photo proof — payout lands in your wallet, not in a 45-day pipeline.",
+    icon: "M5 16l1.5-5.5h11L19 16M3.5 16h17M5.5 16v3h2.5v-2h8v2h2.5v-3M8 13.2h.01M16 13.2h.01",
+    billing: "yearly",
+    hasTerm: false,
+    usesNominee: false,
+    rate: 0.03,
+    ropRefund: false,
+    covMin: 2000, covMax: 150000, covStep: 1000, covDefault: 15000,
+    covLabel: "Vehicle value (max payout)",
+    benefit: (cov) =>
+      `Up to <b>$${cov} for accident damage or theft</b> — oracle + photo-proof verification, paid to your wallet`,
   },
   {
     id: "travel",
+    name: "Travel",
+    tagline: "Full trip protection",
+    plain:
+      "One payment per trip. Medical emergencies abroad, lost baggage, trip cancellation — verified against travel data and paid straight to your wallet, wherever you are.",
+    icon: "M3 12a9 9 0 1018 0 9 9 0 00-18 0zM3 12h18M12 3c2.5 2.5 3.8 5.6 3.8 9s-1.3 6.5-3.8 9c-2.5-2.5-3.8-5.6-3.8-9S9.5 5.5 12 3z",
+    billing: "once",
+    hasTerm: false,
+    usesNominee: false,
+    rate: 0.0016,
+    ropRefund: false,
+    covMin: 5000, covMax: 100000, covStep: 5000, covDefault: 25000,
+    covLabel: "Trip cover (medical, baggage, cancellation)",
+    benefit: (cov) =>
+      `Up to <b>$${cov} for medical emergencies, lost baggage or cancellation</b> — verified by travel-data oracles, paid to your wallet`,
+  },
+  {
+    id: "delay",
     name: "Travel Delay",
     tagline: "Instant payout, no claim forms",
     plain:
-      "Pay once before your trip. If your flight is delayed 3+ hours, money lands in your wallet automatically — usually before you leave the airport. No forms, no calls, no waiting.",
+      "Pay once before your trip. If your flight is delayed 3+ hours, money lands in your wallet automatically — usually before you leave the airport.",
     icon: "M2.5 19h19M6 16l4-12 8.5 8.5M10 4l8 4",
+    billing: "once",
+    hasTerm: false,
+    usesNominee: false,
+    rate: 0.024,
+    ropRefund: false,
+    covMin: 100, covMax: 2000, covStep: 50, covDefault: 500,
+    covLabel: "Payout if your flight is delayed",
+    benefit: (cov) =>
+      `<b>$${cov} instantly to your wallet</b> if your flight is delayed 3+ hours — automatic, no claim to file`,
   },
 ];
 
-function usePricing(plan: PlanId, coverage: number, years: number) {
-  return useMemo(() => {
-    if (plan === "travel") {
-      const premium = Math.max(5, coverage * 0.024);
-      return { monthly: 0, oneTime: premium, totalPaid: premium, refund: 0 };
-    }
-    const base = coverage * 0.00042;
-    const monthly = plan === "rop" ? base * 1.65 : base;
-    const totalPaid = monthly * 12 * years;
-    return {
-      monthly,
-      oneTime: 0,
-      totalPaid,
-      refund: plan === "rop" ? totalPaid : 0,
-    };
-  }, [plan, coverage, years]);
-}
-
 const usd = (n: number) =>
   n.toLocaleString("en-US", { maximumFractionDigits: n < 100 ? 2 : 0 });
+
+const billingUnit: Record<Billing, string> = {
+  monthly: " /month",
+  yearly: " /year",
+  once: " once",
+};
 
 /* ------------------------------------------------------------------ */
 /* shared bits                                                         */
@@ -121,7 +217,7 @@ export default function DemoJourney() {
   const [step, setStep] = useState(0);
   const [connecting, setConnecting] = useState(false);
   const [connected, setConnected] = useState(false);
-  const [plan, setPlan] = useState<PlanId>("term");
+  const [planId, setPlanId] = useState("term");
   const [coverage, setCoverage] = useState(50000);
   const [years, setYears] = useState(10);
   const [nominee, setNominee] = useState({ name: "", relation: "Spouse", wallet: "" });
@@ -129,9 +225,22 @@ export default function DemoJourney() {
   const [minted, setMinted] = useState(false);
   const [policyId, setPolicyId] = useState("");
 
-  const price = usePricing(plan, coverage, years);
-  const planInfo = plans.find((p) => p.id === plan)!;
-  const isTravel = plan === "travel";
+  const plan = plans.find((p) => p.id === planId)!;
+
+  const price = useMemo(() => {
+    const base = Math.max(5, coverage * plan.rate);
+    const totalPaid = plan.hasTerm ? base * 12 * years : base;
+    return {
+      amount: base,
+      totalPaid,
+      refund: plan.ropRefund ? totalPaid : 0,
+    };
+  }, [plan, coverage, years]);
+
+  const selectPlan = (p: Plan) => {
+    setPlanId(p.id);
+    setCoverage(p.covDefault);
+  };
 
   const connect = () => {
     setConnecting(true);
@@ -150,9 +259,9 @@ export default function DemoJourney() {
     const lines = [
       "Wallet signature requested… approved ✓",
       "Minting your policy as a smart contract…",
-      isTravel
-        ? "Registering payout destination: your wallet ✓"
-        : `Writing nominee "${nominee.name || "—"}" into the contract ✓`,
+      plan.usesNominee
+        ? `Writing nominee "${nominee.name || "—"}" into the contract ✓`
+        : "Registering payout destination: your wallet ✓",
       "Locking terms — no one can change them now ✓",
       `Certificate ${id} issued ✓`,
     ];
@@ -171,7 +280,6 @@ export default function DemoJourney() {
     setNominee({ name: "", relation: "Spouse", wallet: "" });
   };
 
-  /* ---------- progress bar ---------- */
   const labels = ["Connect", "Choose", "Price", "Nominee", "Certificate"];
 
   return (
@@ -245,23 +353,28 @@ export default function DemoJourney() {
           <StepHeader
             n={2}
             title="Choose your protection"
-            sub="Three products, explained in plain words. Pick one to see real numbers."
+            sub="Seven products, explained in plain words. Pick one to see real numbers."
           />
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {plans.map((p) => (
               <button
                 key={p.id}
-                onClick={() => setPlan(p.id)}
-                aria-pressed={plan === p.id}
+                onClick={() => selectPlan(p)}
+                aria-pressed={planId === p.id}
                 className={`text-left rounded-2xl border p-5 transition-all ${
-                  plan === p.id
+                  planId === p.id
                     ? "border-cyan-neon/70 bg-cyan-neon/10 shadow-[0_0_30px_rgba(34,211,238,0.15)]"
                     : "border-muted/20 hover:border-muted/50"
                 }`}
               >
-                <svg viewBox="0 0 24 24" className="h-7 w-7 text-cyan-neon" fill="none" stroke="currentColor" strokeWidth="1.8">
-                  <path d={p.icon} strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
+                <div className="flex items-center justify-between gap-2">
+                  <svg viewBox="0 0 24 24" className="h-7 w-7 text-cyan-neon shrink-0" fill="none" stroke="currentColor" strokeWidth="1.8">
+                    <path d={p.icon} strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-muted">
+                    {p.billing === "once" ? "pay once" : p.billing}
+                  </span>
+                </div>
                 <h3 className="mt-3 font-display font-bold">{p.name}</h3>
                 <p className="text-xs text-cyan-neon font-semibold mt-0.5">{p.tagline}</p>
                 <p className="mt-2 text-xs text-muted leading-relaxed">{p.plain}</p>
@@ -284,21 +397,20 @@ export default function DemoJourney() {
             <div className="space-y-6">
               <div>
                 <label htmlFor="dj-coverage" className="text-sm font-semibold">
-                  {isTravel ? "Payout if your flight is delayed" : "Cover amount (what your family receives)"}
-                  : <span className="text-cyan-neon font-mono">${usd(coverage)}</span>
+                  {plan.covLabel}: <span className="text-cyan-neon font-mono">${usd(coverage)}</span>
                 </label>
                 <input
                   id="dj-coverage"
                   type="range"
-                  min={isTravel ? 100 : 10000}
-                  max={isTravel ? 2000 : 250000}
-                  step={isTravel ? 50 : 5000}
+                  min={plan.covMin}
+                  max={plan.covMax}
+                  step={plan.covStep}
                   value={coverage}
                   onChange={(e) => setCoverage(Number(e.target.value))}
                   className="mt-3 w-full accent-violet-500"
                 />
               </div>
-              {!isTravel && (
+              {plan.hasTerm && (
                 <div>
                   <label htmlFor="dj-years" className="text-sm font-semibold">
                     Protection period: <span className="text-cyan-neon font-mono">{years} years</span>
@@ -326,22 +438,24 @@ export default function DemoJourney() {
 
             {/* the deal */}
             <div className="rounded-2xl bg-void/70 border border-violet-neon/30 p-6">
-              <h3 className="font-display font-bold text-lg">Your deal — {planInfo.name}</h3>
+              <h3 className="font-display font-bold text-lg">Your deal — {plan.name}</h3>
               <div className="mt-5 space-y-4">
                 <div className="flex items-start justify-between gap-4 pb-4 border-b border-muted/15">
                   <div>
                     <p className="text-xs uppercase tracking-widest text-muted">You pay</p>
                     <p className="mt-1 font-display text-3xl font-bold">
-                      ${usd(isTravel ? price.oneTime : price.monthly)}
-                      <span className="text-sm font-normal text-muted">
-                        {isTravel ? " once" : " /month"}
-                      </span>
+                      ${usd(price.amount)}
+                      <span className="text-sm font-normal text-muted">{billingUnit[plan.billing]}</span>
                     </p>
-                    {!isTravel && (
-                      <p className="text-xs text-muted mt-1">
-                        ${usd(price.totalPaid)} total over {years} years
-                      </p>
-                    )}
+                    <p className="text-xs text-muted mt-1">
+                      {plan.hasTerm
+                        ? `$${usd(price.totalPaid)} total over ${years} years`
+                        : plan.billing === "monthly"
+                          ? "Cancel anytime — no lock-in"
+                          : plan.billing === "yearly"
+                            ? "Renews yearly, cancel anytime"
+                            : "One payment, covered for the whole trip"}
+                    </p>
                   </div>
                 </div>
                 <div>
@@ -349,15 +463,9 @@ export default function DemoJourney() {
                   <ul className="mt-2 space-y-2.5 text-sm">
                     <li className="flex gap-2.5">
                       <span className="text-lime-neon">✓</span>
-                      <span>
-                        {isTravel ? (
-                          <><b>${usd(coverage)} instantly to your wallet</b> if your flight is delayed 3+ hours — automatic, no claim to file</>
-                        ) : (
-                          <><b>${usd(coverage)} paid to your nominee</b> automatically if the covered event happens — within minutes, no paperwork for your family</>
-                        )}
-                      </span>
+                      <span dangerouslySetInnerHTML={{ __html: plan.benefit(usd(coverage)) }} />
                     </li>
-                    {plan === "rop" && (
+                    {plan.ropRefund && (
                       <li className="flex gap-2.5">
                         <span className="text-lime-neon">✓</span>
                         <span>
@@ -387,19 +495,19 @@ export default function DemoJourney() {
         <div>
           <StepHeader
             n={4}
-            title={isTravel ? "Who gets paid?" : "Name your nominee"}
+            title={plan.usesNominee ? "Name your nominee" : "Who gets paid?"}
             sub={
-              isTravel
-                ? "Travel cover pays YOU directly — the money simply appears in your connected wallet. No nominee needed."
-                : "Your nominee is written directly into the smart contract. If the covered event happens, the payout goes to them automatically — they never have to prove anything to a company, chase documents, or wait."
+              plan.usesNominee
+                ? "Your nominee is written directly into the smart contract. If the covered event happens, the payout goes to them automatically — they never have to prove anything to a company, chase documents, or wait."
+                : `${plan.name} cover pays YOU directly — the money simply appears in your connected wallet. No nominee needed.`
             }
           />
-          {isTravel ? (
+          {!plan.usesNominee ? (
             <div className="rounded-2xl bg-void/60 border border-muted/20 p-6 max-w-md">
               <p className="text-xs uppercase tracking-widest text-muted">Payout destination</p>
               <p className="mt-2 font-mono text-lime-neon">{short(DEMO_ADDRESS)} (you)</p>
               <p className="mt-3 text-xs text-muted">
-                Delay detected by flight-data oracles → payout lands here. Done.
+                Covered event verified by oracles → payout lands here. Done.
               </p>
             </div>
           ) : (
@@ -451,7 +559,7 @@ export default function DemoJourney() {
             onBack={() => setStep(2)}
             onNext={mint}
             nextLabel="Buy policy (simulated) →"
-            nextDisabled={!isTravel && nominee.name.trim().length < 2}
+            nextDisabled={plan.usesNominee && nominee.name.trim().length < 2}
           />
         </div>
       )}
@@ -479,7 +587,7 @@ export default function DemoJourney() {
               <StepHeader
                 n={5}
                 title="Your digital bond certificate 🎉"
-                sub="This certificate lives in your wallet forever — cryptographic proof of your cover that no company can lose, revoke or dispute. Your nominee's right to the payout is now law, written in code."
+                sub="This certificate lives in your wallet forever — cryptographic proof of your cover that no company can lose, revoke or dispute."
               />
 
               {/* certificate */}
@@ -504,7 +612,7 @@ export default function DemoJourney() {
                     </div>
                     <div>
                       <dt className="text-[10px] uppercase tracking-widest text-muted">Product</dt>
-                      <dd className="font-semibold mt-0.5">{planInfo.name}</dd>
+                      <dd className="font-semibold mt-0.5">{plan.name} Insurance</dd>
                     </div>
                     <div>
                       <dt className="text-[10px] uppercase tracking-widest text-muted">Policyholder</dt>
@@ -512,11 +620,11 @@ export default function DemoJourney() {
                     </div>
                     <div>
                       <dt className="text-[10px] uppercase tracking-widest text-muted">
-                        {isTravel ? "Payout to" : "Nominee"}
+                        {plan.usesNominee ? "Nominee" : "Payout to"}
                       </dt>
                       <dd className="font-semibold mt-0.5">
-                        {isTravel ? "Policyholder (you)" : `${nominee.name} · ${nominee.relation}`}
-                        {!isTravel && (
+                        {plan.usesNominee ? `${nominee.name} · ${nominee.relation}` : "Policyholder (you)"}
+                        {plan.usesNominee && (
                           <span className="block font-mono text-xs text-muted mt-0.5">
                             {nominee.wallet ? short(nominee.wallet) : "wallet to be linked"}
                           </span>
@@ -530,15 +638,13 @@ export default function DemoJourney() {
                       </dd>
                     </div>
                     <div>
-                      <dt className="text-[10px] uppercase tracking-widest text-muted">
-                        {isTravel ? "Premium (one-time)" : "Premium"}
-                      </dt>
+                      <dt className="text-[10px] uppercase tracking-widest text-muted">Premium</dt>
                       <dd className="mt-0.5">
-                        ${usd(isTravel ? price.oneTime : price.monthly)}
-                        {!isTravel && <span className="text-muted"> /month · {years} yrs</span>}
+                        ${usd(price.amount)}
+                        <span className="text-muted">{billingUnit[plan.billing]}{plan.hasTerm ? ` · ${years} yrs` : ""}</span>
                       </dd>
                     </div>
-                    {plan === "rop" && (
+                    {plan.ropRefund && (
                       <div className="col-span-2">
                         <dt className="text-[10px] uppercase tracking-widest text-muted">Maturity benefit</dt>
                         <dd className="mt-0.5 text-lime-neon font-semibold">
@@ -553,7 +659,6 @@ export default function DemoJourney() {
                       Secured by smart contract on Solana · terms immutable ·
                       verify anytime on-chain · Demo certificate — testnet only
                     </p>
-                    {/* stylized QR */}
                     <svg viewBox="0 0 40 40" className="h-14 w-14 shrink-0 text-ink" fill="currentColor" aria-label="Verification code">
                       <rect x="1" y="1" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2.5" />
                       <rect x="29" y="1" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2.5" />
