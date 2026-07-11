@@ -78,27 +78,21 @@ const utilities = [
 
 const roadmap = [
   {
-    quarter: "Q3 2026",
-    title: "Testnet launch",
-    text: "Coverage calculator, mock policies and staking simulation live on testnet. Community stress-testing begins.",
+    quarter: "2026",
+    title: "Testnet launch + SURE TGE",
+    text: "Token created on devnet (done ✓), then mainnet TGE with presale and Raydium listing. Insurance products built and battle-tested on testnet alongside the community.",
     status: "active",
   },
   {
-    quarter: "Q4 2026",
-    title: "Security audits",
-    text: "Independent audits of policy contracts, oracle integrations and pool logic. Bug bounty program opens.",
+    quarter: "Q2 2027",
+    title: "Mainnet products + audit",
+    text: "Independent audits of the policy, vault and claims programs, then parametric non-life products go live on mainnet.",
     status: "next",
   },
   {
-    quarter: "Q1 2027",
-    title: "Mainnet + SURE TGE",
-    text: "Mainnet launch with non-life parametric products. SURE token generation event and staking go live.",
-    status: "future",
-  },
-  {
-    quarter: "Q2 2027",
+    quarter: "Q4 2027",
     title: "Life products & expansion",
-    text: "On-chain life coverage, multi-chain deployment, and institutional underwriting partnerships.",
+    text: "On-chain life coverage with nominee payouts, institutional underwriting partnerships, and multi-chain expansion.",
     status: "future",
   },
 ];

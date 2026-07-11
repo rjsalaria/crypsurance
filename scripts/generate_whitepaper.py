@@ -297,12 +297,11 @@ story += bullets([
 # --- 8. Roadmap
 story += section("08 · Roadmap", "Shipping order")
 story.append(styled_table(
-    ["Quarter", "Milestone", "Detail"],
+    ["Period", "Milestone", "Detail"],
     [
-        ["Q3 2026", "Testnet", "Coverage calculator, mock policies and staking simulation live (already deployed at crypsurance.io/app)"],
-        ["Q4 2026", "Audits + presale", "Independent program audits, legal opinion, KYC, PinkSale presale, Raydium listing"],
-        ["Q1 2027", "Mainnet", "Parametric non-life products live; staking pools open; governance phase 1"],
-        ["Q2 2027", "Expansion", "Life products (first jurisdictions), multi-chain deployment, institutional underwriting partners"],
+        ["2026", "Testnet + SURE TGE", "Token created on devnet (done), mainnet token generation event, PinkSale presale and Raydium listing; insurance products built and tested on testnet (demo live at crypsurance.io/app)"],
+        ["Q2 2027", "Mainnet products + audit", "Independent audits of policy, vault and claims programs; parametric non-life products live on mainnet; staking pools open"],
+        ["Q4 2027", "Life products & expansion", "On-chain life coverage with nominee payouts (first jurisdictions), institutional underwriting partners, multi-chain expansion"],
     ],
     [22 * mm, 38 * mm, 110 * mm],
 ))
