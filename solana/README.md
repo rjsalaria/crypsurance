@@ -1,12 +1,13 @@
-# SURE Token — Launch Runbook
+# SURETY Token — Launch Runbook
 
-Every command used (and to be used) for creating and launching the SURE token
+Every command used (and to be used) for creating and launching the SURETY token
 on Solana, with what it does and what to expect. Commands are PowerShell-ready
 for Windows unless noted.
 
-**Status:** devnet rehearsal completed 2026-07-06 —
-mint [`baanezF9eVdi7nXnCs3zjE31MQhBUwhj6cmn86LsQNZ`](https://explorer.solana.com/address/baanezF9eVdi7nXnCs3zjE31MQhBUwhj6cmn86LsQNZ?cluster=devnet)
-(1B SURE, mint + freeze authority revoked).
+**Status:** devnet rehearsal completed —
+mint [`8wAqKooKyqubCG9nNx2bfcq9TQ9jEJxojyhAMAdfsHn9`](https://explorer.solana.com/address/8wAqKooKyqubCG9nNx2bfcq9TQ9jEJxojyhAMAdfsHn9?cluster=devnet)
+(1B SURETY, mint + freeze authority revoked). Earlier rehearsal mints under
+the retired SURE and SURT symbols (`baane…sQNZ`, `3fud…scLV`) are abandoned.
 
 ---
 
@@ -110,8 +111,8 @@ node create-token.js mainnet-beta
 **What the script does, in order** (`create-token.js`):
 
 1. **Creates the mint + metadata** — the token's on-chain identity: name
-   "CrypSurance", symbol "SURE", 9 decimals, link to the logo file.
-2. **Mints 1,000,000,000 SURE** to your wallet — the only mint that will
+   "CrypSurance", symbol "SURETY", 9 decimals, link to the logo file.
+2. **Mints 1,000,000,000 SURETY** to your wallet — the only mint that will
    ever happen.
 3. **Revokes the mint authority** — destroys the power to create more
    tokens. Irreversible, and the #1 thing buyers verify.
@@ -141,12 +142,12 @@ supply 1B, both authorities `none`.
 
 ## 6. Before mainnet: the checklist
 
-1. **Metadata live** — `https://crypsurance.io/sure-metadata.json` and the
+1. **Metadata live** — `https://crypsurance.io/surety-metadata.json` and the
    square logo PNG must return 200 (they ship with the site zip).
 2. **Squads multisig created** (squads.so) — the treasury vault.
 3. **Helius mainnet RPC** in `.env` — the public RPC is not reliable enough
    for a launch.
-4. **Immediately after minting:** send the full 1B SURE from the deployer
+4. **Immediately after minting:** send the full 1B SURETY from the deployer
    wallet to the multisig (Phantom → Send → paste multisig address, or ask
    for a transfer script). The deployer wallet is then retired.
 5. **Publish the mint address** on the website, X and Telegram — pinned.

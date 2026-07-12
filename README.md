@@ -1,6 +1,6 @@
 # CrypSurance
 
-Decentralized insurance protocol — marketing site, interactive demo, SURE
+Decentralized insurance protocol — marketing site, interactive demo, SURETY
 token tooling, and whitepaper. Live at [crypsurance.io](https://crypsurance.io).
 
 ## What's in this repo
@@ -11,7 +11,7 @@ token tooling, and whitepaper. Live at [crypsurance.io](https://crypsurance.io).
 | `components/` | React components, incl. `DemoJourney` (5-step buy-a-policy walkthrough) |
 | `public/` | Static assets: logo, `whitepaper.pdf` |
 | `scripts/generate_whitepaper.py` | Regenerates the whitepaper PDF (Python + reportlab) |
-| `solana/` | SURE token creation tooling — **see [solana/README.md](solana/README.md) for the full launch runbook** |
+| `solana/` | SURETY token creation tooling — **see [solana/README.md](solana/README.md) for the full launch runbook** |
 
 ## Everyday commands
 
@@ -42,10 +42,10 @@ python scripts/generate_whitepaper.py   # then npm run build to include it
 
 ## Token launch
 
-The SURE token launches on Solana (PinkSale presale → Raydium listing).
+The SURETY token launches on Solana (PinkSale presale → Raydium listing).
 Start with the runbook in [solana/README.md](solana/README.md); tokenomics
 and terms live in the whitepaper.
 
-Devnet rehearsal (2026-07-06):
-mint [`baane…sQNZ`](https://explorer.solana.com/address/baanezF9eVdi7nXnCs3zjE31MQhBUwhj6cmn86LsQNZ?cluster=devnet)
-— 1B SURE, mint + freeze authorities revoked. ✓
+Devnet rehearsal (2026-07-12):
+mint [`8wAq…sHn9`](https://explorer.solana.com/address/8wAqKooKyqubCG9nNx2bfcq9TQ9jEJxojyhAMAdfsHn9?cluster=devnet)
+— 1B SURETY, mint + freeze authorities revoked. ✓

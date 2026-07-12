@@ -31,7 +31,7 @@ const steps = [
   {
     n: "02",
     title: "Pools underwrite",
-    text: "SURE stakers provide liquidity to underwriting pools and earn premium yield for backing real-world risk.",
+    text: "SURETY stakers provide liquidity to underwriting pools and earn premium yield for backing real-world risk.",
   },
   {
     n: "03",
@@ -61,17 +61,17 @@ const utilities = [
   },
   {
     title: "Staking rewards",
-    text: "Stake SURE into underwriting pools and earn a share of every premium paid into the protocol.",
+    text: "Stake SURETY into underwriting pools and earn a share of every premium paid into the protocol.",
     icon: "M12 2v20M5 9l7-7 7 7M7 21h10",
   },
   {
     title: "Claim underwriting",
-    text: "Staked SURE backs live policies. Deep pools mean bigger coverage capacity and stronger trust.",
+    text: "Staked SURETY backs live policies. Deep pools mean bigger coverage capacity and stronger trust.",
     icon: "M4 7h16M4 12h16M4 17h10",
   },
   {
     title: "Fee discounts",
-    text: "Hold SURE to unlock premium discounts and priority access to new coverage products.",
+    text: "Hold SURETY to unlock premium discounts and priority access to new coverage products.",
     icon: "M9 15L15 9M9.5 9.5h.01M14.5 14.5h.01M12 21a9 9 0 100-18 9 9 0 000 18z",
   },
 ];
@@ -79,7 +79,7 @@ const utilities = [
 const roadmap = [
   {
     quarter: "2026",
-    title: "Testnet launch + SURE TGE",
+    title: "Testnet launch + SURETY TGE",
     text: "Token created on devnet (done ✓), then mainnet TGE with presale and Raydium listing. Insurance products built and battle-tested on testnet alongside the community.",
     status: "active",
   },
@@ -103,12 +103,12 @@ const faqs = [
     a: "Traditional insurers decide your claim behind closed doors and can take months to pay. CrypSurance policies are smart contracts: terms are public, claims are verified by decentralized oracles, and payouts execute automatically — usually within minutes.",
   },
   {
-    q: "What does the SURE token actually do?",
-    a: "SURE is the protocol's utility token. It powers governance voting, earns staking rewards from premiums, provides underwriting liquidity that backs live policies, and unlocks fee discounts for holders.",
+    q: "What does the SURETY token actually do?",
+    a: "SURETY is the protocol's utility token. It powers governance voting, earns staking rewards from premiums, provides underwriting liquidity that backs live policies, and unlocks fee discounts for holders.",
   },
   {
     q: "Who pays my claim if there's no insurance company?",
-    a: "Community underwriting pools. SURE stakers deposit liquidity that collateralizes policies, and they earn premium yield in return. When a verified claim triggers, the pool pays out instantly by contract.",
+    a: "Community underwriting pools. SURETY stakers deposit liquidity that collateralizes policies, and they earn premium yield in return. When a verified claim triggers, the pool pays out instantly by contract.",
   },
   {
     q: "What happens if oracles report a wrong result?",
@@ -277,15 +277,15 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ================= SURE TOKEN ================= */}
+      {/* ================= SURETY TOKEN ================= */}
       <section className="px-4 sm:px-6 py-24 scroll-mt-24" id="token">
         <div className="mx-auto max-w-6xl">
           <SectionHeading
-            eyebrow="SURE Token"
+            eyebrow="SURETY Token"
             title={
               <>
                 The engine of the protocol:{" "}
-                <span className="text-gradient">$SURE</span>
+                <span className="text-gradient">$SURETY</span>
               </>
             }
             subtitle="One token that governs the protocol, underwrites its policies, and rewards the community that secures it."
@@ -294,7 +294,7 @@ export default function Home() {
           <div className="mt-12 grid gap-10 lg:grid-cols-2 items-center">
             {/* donut */}
             <div className="glass-card p-8 flex flex-col sm:flex-row items-center gap-8">
-              <svg viewBox="0 0 42 42" className="h-52 w-52 shrink-0 -rotate-90" role="img" aria-label="SURE token distribution chart">
+              <svg viewBox="0 0 42 42" className="h-52 w-52 shrink-0 -rotate-90" role="img" aria-label="SURETY token distribution chart">
                 {donutSegments()}
                 <circle cx="21" cy="21" r="12" fill="#0b0620" />
               </svg>

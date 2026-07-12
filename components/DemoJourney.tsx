@@ -678,7 +678,7 @@ export default function DemoJourney() {
                   ↻ Try another product
                 </button>
                 <a href="/#token" className="btn-gradient px-8 py-3 rounded-xl font-display font-bold text-white">
-                  I'm convinced — about SURE
+                  I'm convinced — about SURETY
                 </a>
               </div>
             </div>

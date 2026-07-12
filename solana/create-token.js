@@ -1,5 +1,5 @@
 /**
- * Create the SURE token on Solana (devnet or mainnet-beta).
+ * Create the SURETY token on Solana (devnet or mainnet-beta).
  *
  * - Classic SPL token + Metaplex metadata (maximum wallet/DEX compatibility)
  * - 1,000,000,000 supply, 9 decimals, minted to your wallet
@@ -43,7 +43,7 @@ const SUPPLY = 1_000_000_000n * 10n ** 9n; // 1B with 9 decimals
 // Hosted token metadata JSON: { name, symbol, description, image }
 // Point this at your real hosted file before mainnet.
 const METADATA_URI =
-  process.env.METADATA_URI || "https://crypsurance.io/sure-metadata.json";
+  process.env.METADATA_URI || "https://crypsurance.io/surety-metadata.json";
 
 function loadSecretKey() {
   if (process.env.KEYPAIR_PATH) {
@@ -81,14 +81,14 @@ async function main() {
   await createFungible(umi, {
     mint,
     name: "CrypSurance",
-    symbol: "SURE",
+    symbol: "SURETY",
     uri: METADATA_URI,
     sellerFeeBasisPoints: percentAmount(0),
     decimals: 9,
   }).sendAndConfirm(umi);
 
   // 2. mint full fixed supply to our wallet
-  console.log("[2/4] Minting 1,000,000,000 SURE…");
+  console.log("[2/4] Minting 1,000,000,000 SURETY…");
   const ata = await getOrCreateAssociatedTokenAccount(
     conn,
     payer,
@@ -125,10 +125,10 @@ async function main() {
   }
 
   const finalInfo = await getMint(conn, mintPk);
-  console.log("\n=== SURE token created ===");
+  console.log("\n=== SURETY token created ===");
   console.log(`Mint address:     ${mintPk.toBase58()}`);
   console.log(`Token account:    ${ata.address.toBase58()}`);
-  console.log(`Supply:           ${(finalInfo.supply / 10n ** 9n).toLocaleString()} SURE`);
+  console.log(`Supply:           ${(finalInfo.supply / 10n ** 9n).toLocaleString()} SURETY`);
   console.log(`Mint authority:   ${finalInfo.mintAuthority ?? "none (revoked ✓)"}`);
   console.log(`Freeze authority: ${finalInfo.freezeAuthority ?? "none ✓"}`);
   console.log(

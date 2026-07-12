@@ -16,7 +16,7 @@ function Staking() {
     <div className="glass-card p-6 sm:p-8">
       <h2 className="font-display text-2xl font-bold">The other side: earn by protecting others</h2>
       <p className="mt-1 text-sm text-muted max-w-2xl">
-        Where does payout money come from? These community pools. SURE stakers
+        Where does payout money come from? These community pools. SURETY stakers
         deposit into them, back real policies, and earn a share of every
         premium. Simulated testnet data.
       </p>

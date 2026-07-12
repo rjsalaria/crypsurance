@@ -132,7 +132,7 @@ def donut():
         d.add(w)
         start += extent
     d.add(String(cx, cy + 4, "1B", fontName="Helvetica-Bold", fontSize=18, fillColor=INK, textAnchor="middle"))
-    d.add(String(cx, cy - 12, "SURE", fontName="Helvetica", fontSize=9, fillColor=MUTED, textAnchor="middle"))
+    d.add(String(cx, cy - 12, "SURETY", fontName="Helvetica", fontSize=9, fillColor=MUTED, textAnchor="middle"))
     # legend
     y = 160
     for label, pct, col in ALLOC:
@@ -172,8 +172,8 @@ story += [
     P("CrypSurance is a decentralized insurance protocol that rebuilds the insurance stack on smart contracts. "
       "Policies are minted as immutable on-chain contracts; community liquidity pools underwrite risk; "
       "decentralized oracles verify covered events; and payouts settle automatically — in minutes, not months. "
-      "The protocol is governed and secured by its native utility token, <b>SURE</b>."),
-    P("This document describes the protocol architecture, product lines, the SURE token economy, the presale "
+      "The protocol is governed and secured by its native utility token, <b>SURETY</b>."),
+    P("This document describes the protocol architecture, product lines, the SURETY token economy, the presale "
       "structure, governance, and the delivery roadmap."),
 ]
 
@@ -198,7 +198,7 @@ story += [
     P("CrypSurance replaces the insurance company with three composable layers:"),
     P("<b>1 — Policy layer.</b> Every policy is a smart contract minted at purchase. Coverage terms, premium, "
       "duration, covered events and payout logic are encoded on-chain, identical for every buyer, and readable by anyone."),
-    P("<b>2 — Capital layer.</b> Underwriting pools collateralize policies. SURE stakers deposit into pools "
+    P("<b>2 — Capital layer.</b> Underwriting pools collateralize policies. SURETY stakers deposit into pools "
       "(e.g. wallet cover, DeFi cover, parametric travel) and earn a pro-rata share of premiums in exchange for "
       "backing the risk. Pool solvency is a public, real-time on-chain number — not a rating-agency opinion."),
     P("<b>3 — Verification layer.</b> Covered events are confirmed by multiple independent oracle feeds "
@@ -220,23 +220,23 @@ story += [
     P("<b>Life (second phase).</b> Smart-contract life coverage with beneficiaries written into the policy. "
       "Payout executes on oracle-verified proof of death where compliant registry oracles are available. "
       "Rollout is jurisdiction-by-jurisdiction, gated on regulatory clarity."),
-    P("Premiums are payable in stablecoins or SOL. SURE holders receive a <b>15% premium discount</b>, "
+    P("Premiums are payable in stablecoins or SOL. SURETY holders receive a <b>15% premium discount</b>, "
       "already implemented in the protocol's coverage calculator."),
 ]
 
 story.append(PageBreak())
 
 # --- 5. Token
-story += section("05 · SURE Token", "One token, four jobs")
+story += section("05 · SURETY Token", "One token, four jobs")
 story += bullets([
     "<b>Governance</b> — vote on coverage categories, pool parameters, oracle sets and treasury spending.",
-    "<b>Underwriting</b> — stake SURE into pools that collateralize live policies.",
+    "<b>Underwriting</b> — stake SURETY into pools that collateralize live policies.",
     "<b>Yield</b> — stakers earn a pro-rata share of every premium paid into their pool.",
     "<b>Utility</b> — 15% premium discount and priority access to new products for holders.",
 ])
 story += [
     P("<b>Token standard:</b> SPL token on Solana with Metaplex metadata. "
-      "<b>Total supply:</b> 1,000,000,000 SURE — fixed: the mint authority is revoked at creation, "
+      "<b>Total supply:</b> 1,000,000,000 SURETY — fixed: the mint authority is revoked at creation, "
       "so no further tokens can ever be created. Protocol programs are built with Anchor and externally audited."),
     Spacer(1, 6),
     P("Token distribution", "h2"),
@@ -264,8 +264,8 @@ story.append(styled_table(
     [
         ["Chain / platform", "Solana via PinkSale launchpad"],
         ["Soft cap / hard cap", "$150,000 / $250,000"],
-        ["Presale price", "$0.00125 per SURE (200M tokens ÷ $250k hard cap)"],
-        ["Listing price", "$0.0014 per SURE (+12% over presale)"],
+        ["Presale price", "$0.00125 per SURETY (200M tokens ÷ $250k hard cap)"],
+        ["Listing price", "$0.0014 per SURETY (+12% over presale)"],
         ["Listing venue", "Raydium — ~65% of raise into LP, locked 24 months"],
         ["Anti-whale", "Maximum buy 2% of hard cap per wallet"],
         ["Unsold tokens", "Burned"],
@@ -289,7 +289,7 @@ story += [
     P("Governance launches as a constrained token vote and widens as the protocol proves itself:"),
 ]
 story += bullets([
-    "<b>Phase 1 (launch):</b> team multisig executes; SURE votes are binding signals on pool parameters and listings.",
+    "<b>Phase 1 (launch):</b> team multisig executes; SURETY votes are binding signals on pool parameters and listings.",
     "<b>Phase 2 (post-audit #2):</b> on-chain governor contract controls pool creation, oracle sets and treasury spend.",
     "<b>Phase 3:</b> full DAO — protocol upgrades require token-holder approval with timelock.",
 ])
@@ -299,7 +299,7 @@ story += section("08 · Roadmap", "Shipping order")
 story.append(styled_table(
     ["Period", "Milestone", "Detail"],
     [
-        ["2026", "Testnet + SURE TGE", "Token created on devnet (done), mainnet token generation event, PinkSale presale and Raydium listing; insurance products built and tested on testnet (demo live at crypsurance.io/app)"],
+        ["2026", "Testnet + SURETY TGE", "Token created on devnet (done), mainnet token generation event, PinkSale presale and Raydium listing; insurance products built and tested on testnet (demo live at crypsurance.io/app)"],
         ["Q2 2027", "Mainnet products + audit", "Independent audits of policy, vault and claims programs; parametric non-life products live on mainnet; staking pools open"],
         ["Q4 2027", "Life products & expansion", "On-chain life coverage with nominee payouts (first jurisdictions), institutional underwriting partners, multi-chain expansion"],
     ],
@@ -314,14 +314,14 @@ story += bullets([
     "<b>Capital risk.</b> Correlated claims could stress a pool. Mitigation: per-pool exposure caps, diversification requirements, treasury backstop.",
     "<b>Regulatory risk.</b> Insurance and token sales are regulated activities in most jurisdictions. The protocol geo-blocks "
     "restricted jurisdictions from the presale and rolls out regulated product categories only where legally cleared.",
-    "<b>Market risk.</b> SURE, like all tokens, can lose value. Participation should be sized accordingly.",
+    "<b>Market risk.</b> SURETY, like all tokens, can lose value. Participation should be sized accordingly.",
 ])
 
 # --- 10. Disclaimer
 story += section("10 · Legal Disclaimer", "Read this")
 story += [
     P("This whitepaper is for information only. It is not a prospectus, an offer of securities, insurance, or "
-      "financial advice, and it does not form part of any contract. SURE is a utility token intended for use "
+      "financial advice, and it does not form part of any contract. SURETY is a utility token intended for use "
       "within the CrypSurance protocol; it confers no equity, dividend, or claim on any legal entity. "
       "Participation in the presale is prohibited for residents of jurisdictions where such participation is "
       "restricted, including where required the United States, and is subject to the presale terms published at "

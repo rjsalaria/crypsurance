@@ -15,7 +15,7 @@ export default function Footer() {
           <p className="mt-4 text-sm text-muted max-w-sm leading-relaxed">
             Decentralized insurance protocol delivering fair, fast and secure
             coverage — no middlemen, no paperwork, no waiting. Powered by the
-            SURE token.
+            SURETY token.
           </p>
         </div>
 
@@ -26,7 +26,7 @@ export default function Footer() {
           <ul className="mt-4 space-y-2.5 text-sm">
             <li><Link href="/learn" className="text-muted hover:text-ink transition-colors">How it works</Link></li>
             <li><Link href="/app" className="text-muted hover:text-ink transition-colors">Launch App</Link></li>
-            <li><Link href="/#token" className="text-muted hover:text-ink transition-colors">SURE Token</Link></li>
+            <li><Link href="/#token" className="text-muted hover:text-ink transition-colors">SURETY Token</Link></li>
             <li><Link href="/#roadmap" className="text-muted hover:text-ink transition-colors">Roadmap</Link></li>
           </ul>
         </div>

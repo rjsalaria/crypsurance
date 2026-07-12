@@ -21,11 +21,11 @@ export const metadata: Metadata = {
     template: "%s | CrypSurance",
   },
   description:
-    "Smart-contract powered life and non-life insurance with instant, trustless claim settlement. Join the protocol closing the $1T crypto protection gap, powered by the SURE token.",
+    "Smart-contract powered life and non-life insurance with instant, trustless claim settlement. Join the protocol closing the $1T crypto protection gap, powered by the SURETY token.",
   openGraph: {
     title: "CrypSurance — Decentralized Insurance for the On-Chain World",
     description:
-      "Instant, trustless insurance built on smart contracts. Life & non-life coverage, community underwriting pools, and the SURE token.",
+      "Instant, trustless insurance built on smart contracts. Life & non-life coverage, community underwriting pools, and the SURETY token.",
     url: "https://crypsurance.io",
     siteName: "CrypSurance",
     type: "website",
@@ -34,7 +34,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "CrypSurance — Decentralized Insurance for the On-Chain World",
     description:
-      "Instant, trustless insurance built on smart contracts. Powered by SURE.",
+      "Instant, trustless insurance built on smart contracts. Powered by SURETY.",
   },
 };
 
