@@ -5,7 +5,7 @@ import SectionHeading from "@/components/SectionHeading";
 import ClaimFlow from "@/components/ClaimFlow";
 
 export const metadata: Metadata = {
-  title: "How Decentralized Insurance Works",
+  title: "How Decentralized Cover Works",
   description:
     "See how CrypSurance replaces adjusters and paperwork with smart contracts, oracles and community underwriting pools — and who benefits.",
 };

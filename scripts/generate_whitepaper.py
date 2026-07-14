@@ -85,7 +85,7 @@ def cover_page(c, doc):
     c.drawCentredString(PAGE_W / 2, PAGE_H * 0.585, "CrypSurance")
     c.setFillColor(colors.HexColor("#a89fd0"))
     c.setFont("Helvetica", 13)
-    c.drawCentredString(PAGE_W / 2, PAGE_H * 0.45, "Decentralized Insurance for the On-Chain World")
+    c.drawCentredString(PAGE_W / 2, PAGE_H * 0.45, "Decentralized Cover for the On-Chain World")
     c.setFont("Helvetica", 10)
     c.drawCentredString(PAGE_W / 2, PAGE_H * 0.40, "Whitepaper  ·  Version 1.0  ·  July 2026")
     c.setFont("Helvetica", 9)
@@ -169,7 +169,7 @@ story += [
       "gap exceeding <b>$1 trillion</b>. Meanwhile, two billion people in emerging economies remain underinsured "
       "in traditional markets because legacy insurance cannot reach them profitably: distribution is expensive, "
       "claims are adversarial, and trust is scarce."),
-    P("CrypSurance is a decentralized insurance protocol that rebuilds the insurance stack on smart contracts. "
+    P("CrypSurance is a decentralized cover protocol that rebuilds the insurance stack on smart contracts. "
       "Policies are minted as immutable on-chain contracts; community liquidity pools underwrite risk; "
       "decentralized oracles verify covered events; and payouts settle automatically — in minutes, not months. "
       "The protocol is governed and secured by its native utility token, <b>SURETY</b>."),
@@ -299,7 +299,7 @@ story += section("08 · Roadmap", "Shipping order")
 story.append(styled_table(
     ["Period", "Milestone", "Detail"],
     [
-        ["2026", "Testnet + SURETY TGE", "Token created on devnet (done), mainnet token generation event, PinkSale presale and Raydium listing; insurance products built and tested on testnet (demo live at crypsurance.io/app)"],
+        ["2026", "Testnet + SURETY TGE", "Token created on devnet (done), mainnet token generation event, PinkSale presale and Raydium listing; cover products built and tested on testnet (demo live at crypsurance.io/app)"],
         ["Q2 2027", "Mainnet products + audit", "Independent audits of policy, vault and claims programs; parametric non-life products live on mainnet; staking pools open"],
         ["Q4 2027", "Life products & expansion", "On-chain life coverage with nominee payouts (first jurisdictions), institutional underwriting partners, multi-chain expansion"],
     ],
@@ -338,7 +338,7 @@ doc = BaseDocTemplate(
     pagesize=A4,
     title="CrypSurance Whitepaper v1.0",
     author="CrypSurance",
-    subject="Decentralized Insurance for the On-Chain World",
+    subject="Decentralized Cover for the On-Chain World",
 )
 frame = Frame(20 * mm, 20 * mm, PAGE_W - 40 * mm, PAGE_H - 44 * mm, id="main")
 doc.addPageTemplates([

@@ -27,6 +27,7 @@ type Plan = {
   covStep: number;
   covDefault: number;
   covLabel: string;
+  phase: string; // launch phase disclosure shown on the card
   benefit: (cov: string) => string; // main "you get" bullet
 };
 
@@ -45,6 +46,7 @@ const plans: Plan[] = [
     ropRefund: false,
     covMin: 10000, covMax: 250000, covStep: 5000, covDefault: 50000,
     covLabel: "Cover amount (what your family receives)",
+    phase: "Phase 2 · with licensed partners",
     benefit: (cov) =>
       `<b>$${cov} paid to your nominee</b> automatically if the covered event happens — within minutes, no paperwork for your family`,
   },
@@ -62,6 +64,7 @@ const plans: Plan[] = [
     ropRefund: true,
     covMin: 10000, covMax: 250000, covStep: 5000, covDefault: 50000,
     covLabel: "Cover amount (what your family receives)",
+    phase: "Phase 2 · with licensed partners",
     benefit: (cov) =>
       `<b>$${cov} paid to your nominee</b> automatically if the covered event happens — within minutes, no paperwork for your family`,
   },
@@ -79,6 +82,7 @@ const plans: Plan[] = [
     ropRefund: false,
     covMin: 10000, covMax: 500000, covStep: 10000, covDefault: 100000,
     covLabel: "Hospitalization cover per year",
+    phase: "Phase 2 · with licensed partners",
     benefit: (cov) =>
       `Hospital bills covered up to <b>$${cov} per year</b> — verified and settled to your wallet in minutes`,
   },
@@ -96,6 +100,7 @@ const plans: Plan[] = [
     ropRefund: false,
     covMin: 10000, covMax: 500000, covStep: 10000, covDefault: 100000,
     covLabel: "Accident cover amount",
+    phase: "Phase 2 · with licensed partners",
     benefit: (cov) =>
       `Up to <b>$${cov} paid to you</b> if an accident leaves you disabled — and to your nominee in the worst case`,
   },
@@ -113,6 +118,7 @@ const plans: Plan[] = [
     ropRefund: false,
     covMin: 2000, covMax: 150000, covStep: 1000, covDefault: 15000,
     covLabel: "Vehicle value (max payout)",
+    phase: "Phase 2 · with licensed partners",
     benefit: (cov) =>
       `Up to <b>$${cov} for accident damage or theft</b> — oracle + photo-proof verification, paid to your wallet`,
   },
@@ -130,6 +136,7 @@ const plans: Plan[] = [
     ropRefund: false,
     covMin: 5000, covMax: 100000, covStep: 5000, covDefault: 25000,
     covLabel: "Trip cover (medical, baggage, cancellation)",
+    phase: "Phase 1 · launching first",
     benefit: (cov) =>
       `Up to <b>$${cov} for medical emergencies, lost baggage or cancellation</b> — verified by travel-data oracles, paid to your wallet`,
   },
@@ -147,6 +154,7 @@ const plans: Plan[] = [
     ropRefund: false,
     covMin: 100, covMax: 2000, covStep: 50, covDefault: 500,
     covLabel: "Payout if your flight is delayed",
+    phase: "Phase 1 · launching first",
     benefit: (cov) =>
       `<b>$${cov} instantly to your wallet</b> if your flight is delayed 3+ hours — automatic, no claim to file`,
   },
@@ -377,6 +385,15 @@ export default function DemoJourney() {
                 </div>
                 <h3 className="mt-3 font-display font-bold">{p.name}</h3>
                 <p className="text-xs text-cyan-neon font-semibold mt-0.5">{p.tagline}</p>
+                <span
+                  className={`mt-2 inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                    p.phase.startsWith("Phase 1")
+                      ? "bg-lime-neon/15 text-lime-neon"
+                      : "bg-magenta-neon/10 text-magenta-neon"
+                  }`}
+                >
+                  {p.phase}
+                </span>
                 <p className="mt-2 text-xs text-muted leading-relaxed">{p.plain}</p>
               </button>
             ))}
@@ -612,7 +629,7 @@ export default function DemoJourney() {
                     </div>
                     <div>
                       <dt className="text-[10px] uppercase tracking-widest text-muted">Product</dt>
-                      <dd className="font-semibold mt-0.5">{plan.name} Insurance</dd>
+                      <dd className="font-semibold mt-0.5">{plan.name} Cover</dd>
                     </div>
                     <div>
                       <dt className="text-[10px] uppercase tracking-widest text-muted">Policyholder</dt>

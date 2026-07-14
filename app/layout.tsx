@@ -17,24 +17,24 @@ const spaceGrotesk = Space_Grotesk({
 export const metadata: Metadata = {
   metadataBase: new URL("https://crypsurance.io"),
   title: {
-    default: "CrypSurance — Decentralized Insurance for the On-Chain World",
+    default: "CrypSurance — Decentralized Cover for the On-Chain World",
     template: "%s | CrypSurance",
   },
   description:
-    "Smart-contract powered life and non-life insurance with instant, trustless claim settlement. Join the protocol closing the $1T crypto protection gap, powered by the SURETY token.",
+    "Smart-contract powered cover with instant, trustless claim settlement. Join the protocol closing the $1T crypto protection gap, powered by the SURETY token.",
   openGraph: {
-    title: "CrypSurance — Decentralized Insurance for the On-Chain World",
+    title: "CrypSurance — Decentralized Cover for the On-Chain World",
     description:
-      "Instant, trustless insurance built on smart contracts. Life & non-life coverage, community underwriting pools, and the SURETY token.",
+      "Instant, trustless cover built on smart contracts. Parametric protection, community underwriting pools, and the SURETY token.",
     url: "https://crypsurance.io",
     siteName: "CrypSurance",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "CrypSurance — Decentralized Insurance for the On-Chain World",
+    title: "CrypSurance — Decentralized Cover for the On-Chain World",
     description:
-      "Instant, trustless insurance built on smart contracts. Powered by SURETY.",
+      "Instant, trustless cover built on smart contracts. Powered by SURETY.",
   },
 };
 

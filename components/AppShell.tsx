@@ -118,15 +118,37 @@ export default function AppShell() {
           Interactive demo · no real money
         </span>
         <h1 className="mt-3 font-display text-3xl sm:text-4xl font-bold">
-          Buy insurance in <span className="text-gradient">2 minutes</span> — try it
+          Get covered in <span className="text-gradient">2 minutes</span> — try it
         </h1>
         <p className="mt-2 text-sm text-muted max-w-2xl">
           A complete walkthrough of how CrypSurance works, for everyone — no
           crypto knowledge needed. Everything below is simulated on testnet.
+          CrypSurance is a membership-based cover protocol in development —
+          not an insurance company, and nothing here is an offer of insurance.
         </p>
       </div>
 
       <DemoJourney />
+
+      <div className="glass-card p-6 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h2 className="font-display text-xl font-bold">
+            Ready for the real thing?
+          </h2>
+          <p className="mt-1 text-sm text-muted max-w-xl">
+            The dedicated testnet talks to the actual Solana devnet — real
+            wallets, the real SURETY token, and every protocol milestone as it
+            ships.
+          </p>
+        </div>
+        <a
+          href="/testnet"
+          className="btn-gradient px-6 py-3 rounded-xl font-display font-bold text-white whitespace-nowrap"
+        >
+          Enter Testnet →
+        </a>
+      </div>
+
       <Staking />
       <Policies />
     </div>

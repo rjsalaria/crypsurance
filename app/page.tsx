@@ -5,16 +5,16 @@ import StatCounter from "@/components/StatCounter";
 
 const products = [
   {
-    title: "Life Insurance",
-    tag: "On-chain legacy",
+    title: "Life Cover",
+    tag: "Phase 2 · with licensed partners",
     description:
       "Smart-contract powered life coverage. Beneficiaries are written into the policy contract itself — payouts execute automatically, transparently, with zero paperwork for your loved ones.",
     features: ["Automated beneficiary payout", "Transparent policy terms on-chain", "No medical paperwork maze"],
     accent: "from-violet-neon to-magenta-neon",
   },
   {
-    title: "Non-Life Insurance",
-    tag: "Everyday protection",
+    title: "Everyday Cover",
+    tag: "Parametric · launching first",
     description:
       "Decentralized coverage for property, vehicles, travel and more — underwritten by community liquidity pools and settled by oracle-verified triggers instead of claim adjusters.",
     features: ["Property, vehicle & travel cover", "Community pool underwriting", "Parametric instant settlement"],
@@ -80,7 +80,7 @@ const roadmap = [
   {
     quarter: "2026",
     title: "Testnet launch + SURETY TGE",
-    text: "Token created on devnet (done ✓), then mainnet TGE with presale and Raydium listing. Insurance products built and battle-tested on testnet alongside the community.",
+    text: "Token created on devnet (done ✓), then mainnet TGE with presale and Raydium listing. Cover products built and battle-tested on testnet alongside the community.",
     status: "active",
   },
   {
@@ -155,7 +155,7 @@ export default function Home() {
               89% of crypto holders are uninsured — a $1T+ protection gap
             </p>
             <h1 className="mt-8 font-display text-5xl sm:text-6xl md:text-7xl font-bold leading-[1.05] tracking-tight animate-fade-up">
-              Insurance for the
+              Cover for the
               <br />
               <span className="text-gradient">on-chain world.</span>
             </h1>
@@ -184,7 +184,7 @@ export default function Home() {
             <img
               src="/logo.png"
               alt="CrypSurance shield logo"
-              className="h-52 w-52 sm:h-72 sm:w-72 lg:h-85 lg:w-85 animate-spin-glow select-none"
+              className="h-64 w-64 sm:h-88 sm:w-88 lg:h-105 lg:w-105 animate-spin-glow select-none"
               draggable={false}
             />
           </div>

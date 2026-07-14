@@ -13,8 +13,8 @@ export default function Footer() {
             </span>
           </div>
           <p className="mt-4 text-sm text-muted max-w-sm leading-relaxed">
-            Decentralized insurance protocol delivering fair, fast and secure
-            coverage — no middlemen, no paperwork, no waiting. Powered by the
+            Decentralized cover protocol delivering fair, fast and secure
+            protection — no middlemen, no paperwork, no waiting. Powered by the
             SURETY token.
           </p>
         </div>
@@ -26,6 +26,7 @@ export default function Footer() {
           <ul className="mt-4 space-y-2.5 text-sm">
             <li><Link href="/learn" className="text-muted hover:text-ink transition-colors">How it works</Link></li>
             <li><Link href="/app" className="text-muted hover:text-ink transition-colors">Launch App</Link></li>
+            <li><Link href="/testnet" className="text-muted hover:text-ink transition-colors">Testnet</Link></li>
             <li><Link href="/#token" className="text-muted hover:text-ink transition-colors">SURETY Token</Link></li>
             <li><Link href="/#roadmap" className="text-muted hover:text-ink transition-colors">Roadmap</Link></li>
           </ul>
@@ -56,9 +57,11 @@ export default function Footer() {
       </div>
 
       <div className="border-t border-muted/10 py-6">
-        <p className="text-center text-xs text-muted">
-          © {new Date().getFullYear()} CrypSurance. All rights reserved. Nothing
-          on this site constitutes financial advice.
+        <p className="text-center text-xs text-muted max-w-3xl mx-auto px-4">
+          © {new Date().getFullYear()} CrypSurance. All rights reserved.
+          CrypSurance is a decentralized, membership-based cover protocol under
+          development. It is not an insurance company, and nothing on this site
+          constitutes an offer of insurance or financial advice.
         </p>
       </div>
     </footer>
