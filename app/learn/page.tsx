@@ -199,7 +199,7 @@ export default function LearnPage() {
           </p>
           <div className="mt-8">
             <Link href="/app" className="btn-gradient inline-block px-8 py-3.5 rounded-2xl font-display font-bold text-white">
-              Launch App
+              Try the Demo
             </Link>
           </div>
         </div>

@@ -7,6 +7,7 @@ import Logo from "./Logo";
 const links = [
   { href: "/", label: "Home" },
   { href: "/learn", label: "Learn" },
+  { href: "/app", label: "Demo" },
   { href: "/testnet", label: "Testnet" },
   { href: "/#token", label: "SURETY Token" },
   { href: "/#faq", label: "FAQ" },
@@ -117,13 +118,6 @@ export default function Navbar() {
                 </Link>
               )
             )}
-            <Link
-              href="/app"
-              onClick={() => setOpen(false)}
-              className="font-semibold px-4 py-2 rounded-xl border border-violet-neon/50 text-center"
-            >
-              Launch App
-            </Link>
             <Link
               href="/#token"
               onClick={() => setOpen(false)}

@@ -169,7 +169,7 @@ export default function Home() {
                 href="/app"
                 className="btn-gradient px-8 py-3.5 rounded-2xl font-display font-bold text-white"
               >
-                Launch App
+                Try the Demo
               </Link>
               <a
                 href="/whitepaper.pdf"
@@ -399,7 +399,7 @@ export default function Home() {
           </p>
           <div className="mt-8 flex flex-wrap justify-center gap-4">
             <Link href="/app" className="btn-gradient px-8 py-3.5 rounded-2xl font-display font-bold text-white">
-              Launch App
+              Try the Demo
             </Link>
             <Link
               href="/learn"
