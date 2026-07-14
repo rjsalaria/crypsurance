@@ -140,7 +140,32 @@ supply 1B, both authorities `none`.
 
 ---
 
-## 6. Before mainnet: the checklist
+## 6. Send SURETY to any wallet (the airdrop tool)
+
+```powershell
+cd D:\Workplace\Crypsurance\solana
+$env:KEYPAIR_PATH = "D:\Workplace\Crypsurance\solana\devnet-test.json"
+$env:RPC_URL = "https://devnet.helius-rpc.com/?api-key=YOUR_HELIUS_KEY"
+node send-surety.js RECIPIENT_ADDRESS AMOUNT
+```
+
+Sends SURETY from the holding wallet (which received the full 1B at
+creation) to any address — e.g. `node send-surety.js 3Ebt…YkjB 100000`.
+Creates the recipient's token account automatically if they've never held
+SURETY (costs the sender ~0.002 SOL rent). This is the tool for
+testnet-community starter airdrops.
+
+Notes:
+- The recipient needs only a public **address** — never ask anyone for
+  keys or seed phrases, and never share yours.
+- Tokens show in Phantom only with Testnet Mode on (devnet), and with a
+  grey icon until the metadata JSON is hosted on crypsurance.io.
+- Devnet holdings as of 2026-07-14: holding wallet 999M, founder Phantom
+  (`3Ebt…YkjB`) 1M.
+
+---
+
+## 7. Before mainnet: the checklist
 
 1. **Metadata live** — `https://crypsurance.io/surety-metadata.json` and the
    square logo PNG must return 200 (they ship with the site zip).
