@@ -27,11 +27,25 @@ export default function Navbar() {
           </Link>
 
           <div className="hidden md:flex items-center gap-7 text-sm text-muted">
-            {links.map((l) => (
-              <Link key={l.href} href={l.href} className="hover:text-ink transition-colors">
-                {l.label}
-              </Link>
-            ))}
+            {links.map((l) =>
+              l.label === "Testnet" ? (
+                <Link
+                  key={l.href}
+                  href={l.href}
+                  className="nav-live flex items-center gap-1.5 font-semibold text-lime-neon hover:brightness-125 transition"
+                >
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-lime-neon opacity-60" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-lime-neon" />
+                  </span>
+                  {l.label}
+                </Link>
+              ) : (
+                <Link key={l.href} href={l.href} className="hover:text-ink transition-colors">
+                  {l.label}
+                </Link>
+              )
+            )}
           </div>
 
           <div className="hidden md:flex items-center gap-3">
@@ -83,11 +97,26 @@ export default function Navbar() {
 
         {open && (
           <div className="md:hidden glass-card mt-2 px-5 py-4 flex flex-col gap-4 text-sm">
-            {links.map((l) => (
-              <Link key={l.href} href={l.href} onClick={() => setOpen(false)} className="text-muted hover:text-ink">
-                {l.label}
-              </Link>
-            ))}
+            {links.map((l) =>
+              l.label === "Testnet" ? (
+                <Link
+                  key={l.href}
+                  href={l.href}
+                  onClick={() => setOpen(false)}
+                  className="nav-live flex items-center gap-1.5 font-semibold text-lime-neon"
+                >
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-lime-neon opacity-60" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-lime-neon" />
+                  </span>
+                  {l.label}
+                </Link>
+              ) : (
+                <Link key={l.href} href={l.href} onClick={() => setOpen(false)} className="text-muted hover:text-ink">
+                  {l.label}
+                </Link>
+              )
+            )}
             <Link
               href="/app"
               onClick={() => setOpen(false)}

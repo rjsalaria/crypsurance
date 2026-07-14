@@ -201,6 +201,22 @@ h4,
   animation: pulse-ring 2s ease-out infinite;
 }
 
+/* ---------- live nav link (testnet) ---------- */
+
+@keyframes nav-live-glow {
+  0%,
+  100% {
+    text-shadow: 0 0 6px rgba(163, 230, 53, 0.35);
+  }
+  50% {
+    text-shadow: 0 0 16px rgba(163, 230, 53, 0.85);
+  }
+}
+
+.nav-live {
+  animation: nav-live-glow 2.4s ease-in-out infinite;
+}
+
 /* ---------- FAQ accordion ---------- */
 
 details.faq summary {
