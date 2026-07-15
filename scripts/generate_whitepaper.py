@@ -185,7 +185,7 @@ story += [
 ]
 story += bullets([
     "<b>Opaque claims.</b> Decisions happen behind closed doors, at the insurer's discretion, with an incentive to deny.",
-    "<b>Slow settlement.</b> Average claim cycles run 30–180 days across major non-life categories.",
+    "<b>Slow settlement.</b> Claim cycles often run 30–180 days across major non-life categories.",
     "<b>Extractive overhead.</b> A large share of every premium funds distribution, administration and shareholder returns — not claims.",
     "<b>Gated access.</b> Coverage is rationed by geography, credit history and paperwork. Billions are simply unreachable.",
     "<b>Crypto is excluded.</b> Legacy insurers largely refuse digital-asset risk; the few products that exist "

@@ -496,7 +496,7 @@ export default function DemoJourney() {
                     </li>
                     <li className="flex gap-2.5">
                       <span className="text-lime-neon">✓</span>
-                      <span>Terms locked in code — <b>nobody can deny, delay or change</b> your policy</span>
+                      <span>Terms locked in code — <b>no company discretion</b>; any dispute is decided by member vote, not a claims department</span>
                     </li>
                   </ul>
                 </div>

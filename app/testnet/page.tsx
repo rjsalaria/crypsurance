@@ -44,7 +44,7 @@ const milestones = [
 
 const statusStyle: Record<string, { label: string; cls: string }> = {
   live: { label: "Live ✓", cls: "bg-lime-neon/15 text-lime-neon border-lime-neon/40" },
-  building: { label: "In build", cls: "bg-cyan-neon/10 text-cyan-neon border-cyan-neon/40" },
+  building: { label: "Next", cls: "bg-cyan-neon/10 text-cyan-neon border-cyan-neon/40" },
   planned: { label: "Planned", cls: "bg-surface text-muted border-muted/30" },
 };
 

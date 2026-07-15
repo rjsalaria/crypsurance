@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 
 const comparison = [
   { dim: "Claim decision", trad: "Adjuster's discretion, behind closed doors", defi: "Oracle data consensus, verifiable by anyone" },
-  { dim: "Payout speed", trad: "30–180 days on average", defi: "Minutes after verification" },
+  { dim: "Payout speed", trad: "Often 30–180 days", defi: "Minutes after verification" },
   { dim: "Policy terms", trad: "40 pages of fine print", defi: "Open-source contract, identical for everyone" },
   { dim: "Who profits", trad: "Shareholders of the insurer", defi: "The community that stakes and underwrites" },
   { dim: "Access", trad: "Gated by geography, credit, paperwork", defi: "Anyone with a wallet, anywhere" },

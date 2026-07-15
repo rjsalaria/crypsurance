@@ -152,7 +152,7 @@ export default function Home() {
         <div className="mx-auto max-w-6xl grid items-center gap-12 lg:grid-cols-[1.15fr_0.85fr]">
           <div className="text-center lg:text-left order-2 lg:order-1">
             <p className="inline-block glass-card px-4 py-1.5 text-xs font-semibold tracking-wide text-cyan-neon animate-fade-up">
-              89% of crypto holders are uninsured — a $1T+ protection gap
+              89% of crypto asset holders worldwide are uninsured — a $1T+ protection gap
             </p>
             <h1 className="mt-8 font-display text-5xl sm:text-6xl md:text-7xl font-bold leading-[1.05] tracking-tight animate-fade-up">
               Cover for the
@@ -193,10 +193,10 @@ export default function Home() {
         {/* stats bar */}
         <div className="mx-auto max-w-5xl mt-24 glass-card ring-glow grid grid-cols-2 md:grid-cols-4 divide-x divide-muted/10">
           {[
-            { v: 89, suffix: "%", label: "Crypto holders uninsured" },
-            { v: 1, prefix: "$", suffix: "T+", label: "Global protection gap" },
-            { v: 2, suffix: " min", label: "Target claim settlement" },
-            { v: 100, suffix: "%", label: "On-chain transparency" },
+            { v: 89, suffix: "%", label: "Of crypto asset holders uninsured" },
+            { v: 1, prefix: "$", suffix: "T+", label: "Crypto protection gap" },
+            { v: 2, suffix: "B+", label: "People un- or underinsured worldwide" },
+            { v: 2, suffix: " min", label: "Settlement target after oracle verification" },
           ].map((s) => (
             <div key={s.label} className="px-6 py-8 text-center">
               <p className="font-display text-3xl md:text-4xl font-bold text-gradient">
@@ -206,6 +206,10 @@ export default function Home() {
             </div>
           ))}
         </div>
+        <p className="mx-auto max-w-5xl mt-3 text-center text-[10px] text-muted">
+          Market figures are industry estimates (2026 research); settlement
+          time is a protocol design target for parametric products.
+        </p>
       </section>
 
       {/* ================= PRODUCTS ================= */}
