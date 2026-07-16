@@ -20,13 +20,13 @@ const milestones = [
     id: "M2",
     title: "Protocol programs",
     text: "The policy, vault and claims programs — the smart contracts that ARE the protocol — deployed to devnet.",
-    status: "building",
+    status: "planned",
   },
   {
     id: "M3",
     title: "Buy real cover on devnet",
-    text: "Pay a premium in devnet tokens, get a policy account on-chain and a certificate NFT in your wallet.",
-    status: "planned",
+    text: "v1 is live: pay a real SURETY premium into the pool, policy terms recorded on-chain in the transaction. Policy accounts + certificate NFTs arrive with the M2 programs.",
+    status: "testing",
   },
   {
     id: "M4",
@@ -44,6 +44,7 @@ const milestones = [
 
 const statusStyle: Record<string, { label: string; cls: string }> = {
   live: { label: "Live ✓", cls: "bg-lime-neon/15 text-lime-neon border-lime-neon/40" },
+  testing: { label: "V1 live", cls: "bg-cyan-neon/10 text-cyan-neon border-cyan-neon/40" },
   building: { label: "Next", cls: "bg-cyan-neon/10 text-cyan-neon border-cyan-neon/40" },
   planned: { label: "Planned", cls: "bg-surface text-muted border-muted/30" },
 };
