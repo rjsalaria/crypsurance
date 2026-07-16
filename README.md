@@ -40,6 +40,25 @@ python scripts/generate_whitepaper.py   # then npm run build to include it
    `public_html`** — not inside a subfolder
 4. Hard-refresh crypsurance.io (Ctrl+F5)
 
+## Verifier Network subdomain (verify.crypsurance.io)
+
+The Verifier Network portal lives at `/verify` in this same build. To serve
+it on the dedicated subdomain from Hostinger:
+
+1. hPanel → Domains → Subdomains → create `verify.crypsurance.io`
+2. Easiest v1: set the subdomain to **redirect** to `https://crypsurance.io/verify/`
+3. Later (own document root): upload the same site zip into the subdomain's
+   folder — the build is root-relative, so `/verify/` works there too
+
+The claims oracle operator (`solana/process-claims.js`) escalates unverifiable
+claims to the network as on-chain `verify-request` memos; resolve them after
+offline/partner verification with:
+
+```powershell
+node process-claims.js --resolve POLICY_ID --delayed yes --basis partner:NAME        # dry run
+node process-claims.js --resolve POLICY_ID --delayed yes --basis partner:NAME --pay  # executes
+```
+
 ## Token launch
 
 The SURETY token launches on Solana (PinkSale presale → Raydium listing).

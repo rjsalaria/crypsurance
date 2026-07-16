@@ -37,8 +37,8 @@ const milestones = [
   {
     id: "M5",
     title: "Governance + Verifier Network",
-    text: "Token voting, and the multi-provider verification protocol where staked verifiers confirm real-world events.",
-    status: "planned",
+    text: "Token voting, and the multi-provider verification protocol where staked verifiers confirm real-world events. The Verifier Network portal preview is live — data registry, public verification console, and offline-verification escalation.",
+    status: "testing",
   },
 ];
 
