@@ -62,7 +62,7 @@ export default function Navbar() {
               </svg>
             </a>
             <a
-              href="https://t.me/suretoken_official"
+              href="https://t.me/suretytoken_official"
               target="_blank"
               rel="noopener noreferrer"
               aria-label="SURETY token on Telegram"
@@ -131,7 +131,7 @@ export default function Navbar() {
                   <path d="M18.24 2.25h3.31l-7.23 8.26 8.5 11.24h-6.66l-5.21-6.82-5.97 6.82H1.67l7.73-8.84L1.25 2.25h6.83l4.71 6.23zm-1.16 17.52h1.83L7.08 4.13H5.12z" />
                 </svg>
               </a>
-              <a href="https://t.me/suretoken_official" target="_blank" rel="noopener noreferrer" aria-label="SURETY token on Telegram" className="text-muted hover:text-ink">
+              <a href="https://t.me/suretytoken_official" target="_blank" rel="noopener noreferrer" aria-label="SURETY token on Telegram" className="text-muted hover:text-ink">
                 <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
                   <path d="M21.9 4.3c.3-1.2-.9-2.2-2-1.7L2.7 9.7c-1.2.5-1.1 2.2.1 2.6l4.4 1.4 1.7 5.5c.3 1 1.6 1.3 2.3.5l2.4-2.6 4.5 3.3c.9.7 2.2.2 2.4-1zM8.5 13.2l8.7-5.5c.2-.1.4.2.2.3l-7.2 6.7-.3 3.1z" />
                 </svg>

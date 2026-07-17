@@ -329,7 +329,7 @@ story += [
       "change. Digital assets are volatile and you may lose everything you commit. Do your own research and "
       "consult qualified legal and financial advisers.", "small"),
     Spacer(1, 10),
-    P("© 2026 CrypSurance · crypsurance.io · x.com/crypsurance · t.me/suretoken_official", "small"),
+    P("© 2026 CrypSurance · crypsurance.io · x.com/crypsurance · t.me/suretytoken_official", "small"),
 ]
 
 # ---------- build ----------

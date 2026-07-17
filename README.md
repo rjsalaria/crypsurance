@@ -40,12 +40,12 @@ python scripts/generate_whitepaper.py   # then npm run build to include it
    `public_html`** — not inside a subfolder
 4. Hard-refresh crypsurance.io (Ctrl+F5)
 
-## Verifier Network subdomain (verify.crypsurance.io)
+## Verifier Network subdomain (network.crypsurance.io)
 
 The Verifier Network portal lives at `/verify` in this same build. To serve
 it on the dedicated subdomain from Hostinger:
 
-1. hPanel → Domains → Subdomains → create `verify.crypsurance.io`
+1. hPanel → Domains → Subdomains → create `network.crypsurance.io`
 2. Easiest v1: set the subdomain to **redirect** to `https://crypsurance.io/verify/`
 3. Later (own document root): upload the same site zip into the subdomain's
    folder — the build is root-relative, so `/verify/` works there too

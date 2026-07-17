@@ -69,7 +69,7 @@ export default function VerifyPage() {
       <section className="pt-32 pb-10 px-4 sm:px-6">
         <div className="mx-auto max-w-6xl">
           <p className="text-xs font-bold uppercase tracking-[0.25em] text-cyan-neon">
-            verify.crypsurance.io · preview
+            network.crypsurance.io · preview
           </p>
           <h1 className="mt-4 font-display text-4xl sm:text-5xl font-bold leading-tight">
             The <span className="text-gradient">Verifier Network.</span>
@@ -192,7 +192,7 @@ export default function VerifyPage() {
           </p>
           <div className="mt-6 flex flex-wrap justify-center gap-4">
             <a
-              href="https://t.me/suretoken_official"
+              href="https://t.me/suretytoken_official"
               target="_blank"
               rel="noopener noreferrer"
               className="btn-gradient px-7 py-3 rounded-xl font-display font-bold text-white"

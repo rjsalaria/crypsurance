@@ -44,7 +44,7 @@ export default function Footer() {
               </a>
             </li>
             <li>
-              <a href="https://t.me/suretoken_official" target="_blank" rel="noopener noreferrer" className="text-muted hover:text-ink transition-colors">
+              <a href="https://t.me/suretytoken_official" target="_blank" rel="noopener noreferrer" className="text-muted hover:text-ink transition-colors">
                 Telegram
               </a>
             </li>

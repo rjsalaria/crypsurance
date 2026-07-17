@@ -83,6 +83,32 @@ export default function TestnetPage() {
         </div>
       </section>
 
+      {/* verifier network gateway */}
+      <section className="px-4 sm:px-6 pb-4">
+        <div className="mx-auto max-w-6xl glass-card glass-card-hover p-6 flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-cyan-neon">
+              network.crypsurance.io
+            </p>
+            <h2 className="mt-1 font-display text-xl font-bold">
+              Watch your claim get verified — the{" "}
+              <span className="text-gradient">Verifier Network</span>
+            </h2>
+            <p className="mt-1 text-sm text-muted max-w-xl">
+              Every policy, claim, verification and payout on this page appears
+              live on the network&apos;s public console — including offline
+              verification requests waiting on partners.
+            </p>
+          </div>
+          <Link
+            href="/verify"
+            className="btn-gradient px-6 py-3 rounded-xl font-display font-bold text-white whitespace-nowrap"
+          >
+            Open Verifier Network →
+          </Link>
+        </div>
+      </section>
+
       {/* milestones */}
       <section className="px-4 sm:px-6 py-14">
         <div className="mx-auto max-w-6xl">
