@@ -569,7 +569,7 @@ function MyPolicies({
                     ) : r.status === "requested" ? (
                       <span className="text-xs text-muted">Awaiting oracle</span>
                     ) : r.status === "manual" ? (
-                      <a href="/verify" className="text-xs text-cyan-neon hover:underline">
+                      <a href="https://network.crypsurance.io" className="text-xs text-cyan-neon hover:underline">
                         Verifier Network →
                       </a>
                     ) : (

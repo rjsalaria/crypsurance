@@ -100,12 +100,12 @@ export default function TestnetPage() {
               verification requests waiting on partners.
             </p>
           </div>
-          <Link
-            href="/verify"
+          <a
+            href="https://network.crypsurance.io"
             className="btn-gradient px-6 py-3 rounded-xl font-display font-bold text-white whitespace-nowrap"
           >
             Open Verifier Network →
-          </Link>
+          </a>
         </div>
       </section>
 
