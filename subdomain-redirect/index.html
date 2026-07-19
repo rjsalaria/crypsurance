@@ -2,17 +2,23 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Verifier Network — CrypSurance</title>
-  <meta http-equiv="refresh" content="0; url=https://crypsurance.io/verify/" />
-  <script>window.location.replace("https://crypsurance.io/verify/");</script>
+  <link rel="icon" href="https://crypsurance.io/icon.png" />
+  <meta name="description" content="The CrypSurance Verifier Network — live claims verification on Solana." />
   <style>
-    body { background: #060312; color: #a89fd0; font-family: system-ui, sans-serif;
-           display: grid; place-items: center; min-height: 100vh; margin: 0; }
-    a { color: #22d3ee; }
+    html, body { margin: 0; padding: 0; height: 100%; background: #060312; }
+    iframe { border: 0; width: 100%; height: 100%; display: block; }
+    .fallback { color: #a89fd0; font-family: system-ui, sans-serif; text-align: center; padding: 40vh 20px 0; }
+    .fallback a { color: #22d3ee; }
   </style>
 </head>
 <body>
-  <p>Opening the Verifier Network…
-     <a href="https://crypsurance.io/verify/">Click here if nothing happens.</a></p>
+  <iframe src="https://crypsurance.io/verify/" title="CrypSurance Verifier Network" allow="clipboard-write"></iframe>
+  <noscript>
+    <div class="fallback">
+      <p><a href="https://crypsurance.io/verify/">Open the Verifier Network</a></p>
+    </div>
+  </noscript>
 </body>
 </html>

@@ -4,6 +4,7 @@ import "./globals.css";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import ClickRipple from "@/components/ClickRipple";
+import FrameGuard from "@/components/FrameGuard";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -50,6 +51,7 @@ export default function RootLayout({
       className={`${inter.variable} ${spaceGrotesk.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
+        <FrameGuard />
         <ClickRipple />
         <Navbar />
         <main className="flex-1">{children}</main>
