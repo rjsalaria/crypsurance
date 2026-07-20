@@ -24,6 +24,7 @@ import {
   getAssociatedTokenAddress,
 } from "@solana/spl-token";
 import "@solana/wallet-adapter-react-ui/styles.css";
+import PolicyCertificate from "./PolicyCertificate";
 
 /** The real SURETY devnet mint created by solana/create-token.js. */
 const SURETY_MINT = new PublicKey(
@@ -368,6 +369,7 @@ type PolicyRow = {
   premium: number;
   status: "active" | "requested" | "manual" | "paid" | "denied";
   paidSig?: string;
+  buySig?: string;
 };
 
 function MyPolicies({
@@ -383,6 +385,7 @@ function MyPolicies({
   const [scanning, setScanning] = useState(false);
   const [busyId, setBusyId] = useState("");
   const [error, setError] = useState("");
+  const [certRow, setCertRow] = useState<PolicyRow | null>(null);
 
   const scan = useCallback(async () => {
     if (!publicKey) return;
@@ -424,6 +427,7 @@ function MyPolicies({
                 payout: m.payout,
                 premium: m.premium,
                 status: "active",
+                buySig: sigs[i]?.signature,
               });
             } else if (m.kind === "claim-request") {
               requested.add(m.policy);
@@ -540,7 +544,16 @@ function MyPolicies({
             <tbody>
               {rows.map((r) => (
                 <tr key={r.id} className="border-b border-muted/10 last:border-0">
-                  <td className="py-3 pr-4 font-mono text-cyan-neon">{r.id}</td>
+                  <td className="py-3 pr-4">
+                    <button
+                      onClick={() => setCertRow(r)}
+                      title="View policy certificate"
+                      className="font-mono text-cyan-neon hover:underline underline-offset-2 decoration-dotted inline-flex items-center gap-1"
+                    >
+                      {r.id}
+                      <span className="text-[10px] opacity-70">▣</span>
+                    </button>
+                  </td>
                   <td className="py-3 pr-4 font-mono">{r.flight} · {r.date}</td>
                   <td className="py-3 pr-4 font-mono">{fmt(r.payout)}</td>
                   <td className="py-3 pr-4">
@@ -581,12 +594,21 @@ function MyPolicies({
             </tbody>
           </table>
           <p className="mt-3 text-[10px] text-muted max-w-xl">
-            Claims are verified by the testnet oracle operator: TEST-DELAY
-            flights approve instantly, TEST-ONTIME are denied, real flights are
-            checked against live flight data. Payouts arrive from the pool
-            wallet with the verification recorded on-chain.
+            Tip: click a policy number to open your bond certificate. Claims are
+            verified by the testnet oracle operator — TEST-DELAY approves
+            instantly, TEST-ONTIME is denied, real flights are checked against
+            live flight data. Payouts arrive from the pool wallet with the
+            verification recorded on-chain.
           </p>
         </div>
+      )}
+
+      {certRow && publicKey && (
+        <PolicyCertificate
+          policy={certRow}
+          holder={publicKey.toBase58()}
+          onClose={() => setCertRow(null)}
+        />
       )}
     </div>
   );
