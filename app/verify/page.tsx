@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import Blobs from "@/components/Blobs";
 import VerificationConsole from "@/components/VerificationConsole";
+import OracleCountdown from "@/components/OracleCountdown";
 
 export const metadata: Metadata = {
   title: "Verifier Network — Event Data & Claims Verification",
@@ -110,6 +111,13 @@ export default function VerifyPage() {
               <p className="mt-2 text-sm text-muted leading-relaxed">{s.text}</p>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* autonomous oracle countdown */}
+      <section className="px-4 sm:px-6 py-8">
+        <div className="mx-auto max-w-6xl">
+          <OracleCountdown />
         </div>
       </section>
 

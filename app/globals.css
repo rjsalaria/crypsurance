@@ -201,6 +201,59 @@ h4,
   animation: pulse-ring 2s ease-out infinite;
 }
 
+/* ---------- oracle countdown (futuristic) ---------- */
+
+@keyframes oracle-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes oracle-spin-rev {
+  to {
+    transform: rotate(-360deg);
+  }
+}
+
+@keyframes oracle-flicker {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes oracle-scan {
+  0% {
+    top: -20%;
+  }
+  100% {
+    top: 120%;
+  }
+}
+
+.oracle-ring-a {
+  transform-origin: center;
+  animation: oracle-spin 14s linear infinite;
+}
+.oracle-ring-b {
+  transform-origin: center;
+  animation: oracle-spin-rev 9s linear infinite;
+}
+.oracle-flicker {
+  animation: oracle-flicker 2.6s ease-in-out infinite;
+}
+.oracle-scanline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.6), transparent);
+  animation: oracle-scan 4.5s linear infinite;
+}
+
 /* ---------- click ripple of light ---------- */
 
 @keyframes click-ripple-out {

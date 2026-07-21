@@ -1,0 +1,49 @@
+name: CrypSurance Claims Oracle
+
+# Runs the testnet claims oracle automatically ~every 15 minutes so
+# pending claims settle on-chain without anyone running it by hand.
+#
+# Required repository secrets (Settings → Secrets and variables → Actions):
+#   DEVNET_KEYPAIR    — contents of solana/devnet-test.json (the byte array).
+#                       This is the DEVNET pool wallet key. Play money only —
+#                       NEVER put a mainnet key here.
+#   RPC_URL           — Helius devnet RPC URL.
+#   AVIATIONSTACK_KEY — flight-data API key (optional; real-flight checks).
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"   # every 15 minutes (GitHub may delay under load)
+  workflow_dispatch: {}       # allow manual runs from the Actions tab
+
+# never let two oracle runs overlap
+concurrency:
+  group: claims-oracle
+  cancel-in-progress: false
+
+jobs:
+  settle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install oracle dependencies
+        working-directory: solana
+        run: npm ci --no-audit --no-fund
+
+      - name: Write devnet keypair from secret
+        working-directory: solana
+        run: printf '%s' "$DEVNET_KEYPAIR" > ci-keypair.json
+        env:
+          DEVNET_KEYPAIR: ${{ secrets.DEVNET_KEYPAIR }}
+
+      - name: Run claims oracle
+        working-directory: solana
+        run: node process-claims.js --pay
+        env:
+          KEYPAIR_PATH: ci-keypair.json
+          RPC_URL: ${{ secrets.RPC_URL }}
+          AVIATIONSTACK_KEY: ${{ secrets.AVIATIONSTACK_KEY }}
