@@ -67,13 +67,25 @@ async function verifyFlight(flight, date) {
   if (flight.startsWith("TEST-ONTIME")) return { delayed: false, basis: "testnet-simulated" };
   const key = process.env.AVIATIONSTACK_KEY;
   if (!key) return { skip: true, reason: "real flight, no AVIATIONSTACK_KEY set" };
-  const url = `https://api.aviationstack.com/v1/flights?access_key=${key}&flight_iata=${encodeURIComponent(flight)}&flight_date=${encodeURIComponent(date)}`;
+  // free tier rejects the flight_date param (function_access_restricted),
+  // so query by flight number only and match the date client-side
+  const url = `https://api.aviationstack.com/v1/flights?access_key=${key}&flight_iata=${encodeURIComponent(flight)}`;
   const res = await fetch(url);
   const j = await res.json();
-  const rec = j?.data?.[0];
-  if (!rec) return { skip: true, reason: "flight not found in data feed" };
+  if (j?.error) {
+    return { skip: true, reason: `flight-data API: ${j.error.code ?? j.error.type ?? "error"}` };
+  }
+  const recs = Array.isArray(j?.data) ? j.data : [];
+  if (recs.length === 0) return { skip: true, reason: "flight not found in data feed" };
+  const rec = recs.find((r) => r.flight_date === date) ?? null;
+  if (!rec) {
+    return {
+      skip: true,
+      reason: `no record for ${date} yet (feed covers: ${[...new Set(recs.map((r) => r.flight_date))].join(", ") || "none"})`,
+    };
+  }
   const delayMin = Math.max(rec.departure?.delay ?? 0, rec.arrival?.delay ?? 0);
-  return { delayed: delayMin >= 180, basis: `aviationstack delay=${delayMin}min` };
+  return { delayed: delayMin >= 180, basis: `aviationstack ${rec.flight_date} delay=${delayMin}min` };
 }
 
 async function main() {
@@ -197,4 +209,22 @@ async function main() {
   console.log("\ndone");
 }
 
-main().catch((e) => { console.error(e.message); process.exit(1); });
+const WATCH = process.argv.includes("--watch");
+const INTERVAL_MIN = Number(argValue("--interval") ?? 5);
+
+if (WATCH) {
+  (async () => {
+    console.log(`Watch mode: checking claims every ${INTERVAL_MIN} min (Ctrl+C to stop)\n`);
+    for (;;) {
+      try {
+        await main();
+      } catch (e) {
+        console.error(`[${new Date().toLocaleTimeString()}] cycle failed: ${e.message}`);
+      }
+      console.log(`\n[${new Date().toLocaleTimeString()}] next check in ${INTERVAL_MIN} min…\n`);
+      await new Promise((r) => setTimeout(r, INTERVAL_MIN * 60 * 1000));
+    }
+  })();
+} else {
+  main().catch((e) => { console.error(e.message); process.exit(1); });
+}
