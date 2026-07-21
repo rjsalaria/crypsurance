@@ -12,7 +12,10 @@ name: CrypSurance Claims Oracle
 
 on:
   schedule:
-    - cron: "*/15 * * * *"   # every 15 minutes (GitHub may delay under load)
+    # every 30 minutes. The oracle only calls the flight-data API for
+    # NEW real-flight claims (once each — escalated and TEST-* claims never
+    # call it), so this comfortably respects the aviationstack free tier.
+    - cron: "*/30 * * * *"   # GitHub may delay scheduled runs under load
   workflow_dispatch: {}       # allow manual runs from the Actions tab
 
 # never let two oracle runs overlap

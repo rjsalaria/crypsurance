@@ -172,13 +172,19 @@ async function main() {
 
   for (const id of pending) {
     const p = policies.get(id);
+
+    // Already escalated to human verification — do NOT call the flight-data
+    // API again. This bounds paid-API usage to at most one call per real
+    // flight claim (TEST-* flights never hit the API), so the schedule
+    // frequency cannot burn the free-tier quota.
+    if (escalated.has(id)) {
+      console.log(`~ ${id} (${p.flight} ${p.date}) awaiting offline verification`);
+      continue;
+    }
+
     const verdict = await verifyFlight(p.flight, p.date);
 
     if (verdict.skip) {
-      if (escalated.has(id)) {
-        console.log(`~ ${id} (${p.flight} ${p.date}) awaiting offline verification (${verdict.reason})`);
-        continue;
-      }
       console.log(`? ${id} (${p.flight} ${p.date}) -> ESCALATE to Verifier Network: ${verdict.reason}${PAY ? "" : " (dry run)"}`);
       if (!PAY) continue;
       const memo = JSON.stringify({

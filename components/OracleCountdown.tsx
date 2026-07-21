@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 
-// The oracle runs on a 15-minute schedule (GitHub Actions cron every 15 min).
-const WINDOW_MS = 15 * 60 * 1000;
+// The oracle runs on a 30-minute schedule (GitHub Actions cron every 30 min).
+const WINDOW_MS = 30 * 60 * 1000;
 
 function useOracleClock() {
   const [now, setNow] = useState(() => Date.now());
@@ -113,14 +113,14 @@ export default function OracleCountdown() {
             The oracle never sleeps.
           </h2>
           <p className="mt-2 text-sm text-muted max-w-lg leading-relaxed">
-            A scheduled agent wakes every 15 minutes, pulls the latest event
+            A scheduled agent wakes every 30 minutes, pulls the latest event
             data, and settles every pending claim on-chain — pay, deny, or
             escalate to human verification. No one has to press a button.
           </p>
 
           <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-3 text-sm max-w-md">
             {[
-              { k: "Cycle interval", v: "15:00" },
+              { k: "Cycle interval", v: "30:00" },
               { k: "Network", v: "Solana devnet" },
               { k: "Verification", v: "Multi-source" },
               { k: "On no data", v: "→ human network" },
