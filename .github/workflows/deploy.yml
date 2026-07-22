@@ -54,7 +54,12 @@ jobs:
 
           TS=$(date +%s)
           FOUND=""
-          for prefix in "$DOC" "."; do
+          # hPanel FTP Details names "public_html" as the File Upload Path —
+          # the serving docroot is login-root/public_html; the look-alike
+          # domains/crypsurance.io/public_html on the same server is a ghost
+          # from an older domain configuration (verified: writes there never
+          # appear on the live site).
+          for prefix in "public_html" "$DOC" "."; do
             echo "beacon" > b.txt
             curl -sS "${AUTH[@]}" --ftp-create-dirs -T b.txt "ftp://$SERVER/$prefix/beacon-$TS.txt" 2> up.err; uc=$?
             sleep 4
