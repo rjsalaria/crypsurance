@@ -42,6 +42,13 @@ jobs:
           HOSTONLY=${SERVER%%:*}
           IP=$(getent hosts "$HOSTONLY" | awk '{print $1}' | head -1)
           echo "::warning::FTP server resolves to ${IP:-unresolvable}"
+          # crypsurance.io is hosted on 194.195.84.78 (server736, per hPanel).
+          # Uploading to any other address deploys to the wrong machine.
+          if [ "$HOSTONLY" = "194.195.84.78" ] || [ "$IP" = "194.195.84.78" ]; then
+            echo "::warning::FTP server IS the crypsurance.io hosting box 194.195.84.78"
+          else
+            echo "::error::FTP_SERVER secret does not point at 194.195.84.78 - it targets a different machine; update the secret to 194.195.84.78"
+          fi
           # The main hosting FTP account is u883708131 (public in hPanel).
           # A custom FTP account is jailed to its own folder the webserver
           # never serves — verify which one the secret actually holds.
