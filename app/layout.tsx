@@ -41,7 +41,7 @@ export const metadata: Metadata = {
   // Invisible marker to confirm the push → GitHub Action → Hostinger deploy
   // pipeline is live. Check via view-source on crypsurance.io.
   other: {
-    "deploy-check": "pipeline-verified-2026-07-22",
+    "deploy-check": "autodeploy-verified-2026-07-23",
   },
 };
 
