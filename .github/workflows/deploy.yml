@@ -22,14 +22,12 @@ jobs:
       - name: Build
         run: npm run build
 
-      # Deploy over plain FTP with curl (the transport the probe verified).
-      # The FTP login directory turned out NOT to be the serving docroot:
-      # uploads reported success but the live site never changed. So this step
-      # DISCOVERS the docroot empirically: it uploads tiny beacon files to
-      # candidate paths and checks which one becomes reachable on
-      # https://crypsurance.io, deploys there, then verifies the live site
-      # serves the new build - failing loudly if it does not.
-      - name: Discover docroot and deploy
+      # Diagnose-then-deploy over plain FTP with curl.
+      # Reads the known docroot over FTP first: if its index.html matches the
+      # live site (same server), a beacon write confirms serving, then the full
+      # deploy runs and the live homepage is verified. Every probe result is
+      # annotated so the run page tells the whole story.
+      - name: Diagnose and deploy
         env:
           FTP_SERVER: ${{ secrets.FTP_SERVER }}
           FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
@@ -39,34 +37,41 @@ jobs:
           set +e
           SERVER=$(printf '%s' "$FTP_SERVER" | tr -d '[:space:]' | sed -E 's#^[a-zA-Z]+://##; s#/.*$##')
           AUTH=(--user "$FTP_USERNAME:$FTP_PASSWORD")
-          TS=$(date +%s)
+          DOC="domains/crypsurance.io/public_html"
 
-          # --- 1. beacon discovery -------------------------------------------
-          tags=(root domains pub)
-          prefixes=("." "domains/crypsurance.io/public_html" "public_html")
-          for i in 0 1 2; do
-            echo "beacon-${tags[$i]}" > /tmp/beacon.txt
-            curl -sS --ftp-create-dirs "${AUTH[@]}" -T /tmp/beacon.txt "ftp://$SERVER/${prefixes[$i]}/deploy-beacon-${tags[$i]}-$TS.txt"
-          done
-          sleep 4
+          HOSTONLY=${SERVER%%:*}
+          IP=$(getent hosts "$HOSTONLY" | awk '{print $1}' | head -1)
+          echo "::warning::FTP server resolves to ${IP:-unresolvable}"
+
+          curl -s "${AUTH[@]}" "ftp://$SERVER/" > root.lst
+          echo "::warning::login-dir entries: $(awk '{print $NF}' root.lst | grep -v '^\.$\|^\.\.$' | tr '
+' ' ' | head -c 400)"
+
+          curl -s "${AUTH[@]}" "ftp://$SERVER/$DOC/" > doc.lst; lc=$?
+          echo "::warning::list $DOC exit=$lc entries: $(awk '{print $NF}' doc.lst | grep -v '^\.$\|^\.\.$' | tr '
+' ' ' | head -c 400)"
+
+          curl -s "${AUTH[@]}" "ftp://$SERVER/$DOC/index.html" -o idx.html; fc=$?
+          echo "::warning::fetch $DOC/index.html exit=$fc size=$( [ -f idx.html ] && wc -c < idx.html || echo 0 ) (live site serves 67786 bytes)"
+
+          TS=$(date +%s)
           FOUND=""
-          for i in 0 1 2; do
-            codehttp=$(curl -s -o /dev/null -w '%{http_code}' "https://crypsurance.io/deploy-beacon-${tags[$i]}-$TS.txt")
-            echo "::warning::beacon ${tags[$i]} (prefix '${prefixes[$i]}') -> HTTP $codehttp"
-            if [ "$codehttp" = "200" ] && [ -z "$FOUND" ]; then FOUND="${prefixes[$i]}"; fi
+          for prefix in "$DOC" "."; do
+            echo "beacon" > b.txt
+            curl -sS "${AUTH[@]}" --ftp-create-dirs -T b.txt "ftp://$SERVER/$prefix/beacon-$TS.txt" 2> up.err; uc=$?
+            sleep 4
+            http=$(curl -s -o /dev/null -w '%{http_code}' "https://crypsurance.io/beacon-$TS.txt?x=$RANDOM")
+            echo "::warning::beacon prefix='$prefix' upload-exit=$uc live-http=$http $(head -c 120 up.err)"
+            curl -s "${AUTH[@]}" "ftp://$SERVER/" -Q "DELE $prefix/beacon-$TS.txt" -o /dev/null
+            if [ "$uc" = "0" ] && [ "$http" = "200" ] && [ -z "$FOUND" ]; then FOUND="$prefix"; fi
           done
-          # clean up beacons regardless of outcome
-          for i in 0 1 2; do
-            curl -s "${AUTH[@]}" "ftp://$SERVER/" -Q "DELE ${prefixes[$i]}/deploy-beacon-${tags[$i]}-$TS.txt" -o /dev/null
-          done
+
           if [ -z "$FOUND" ]; then
-            echo "::error::No beacon became publicly reachable - the FTP account cannot reach the crypsurance.io docroot from any known path. Listing login dir entries for diagnosis:"
-            curl -s "${AUTH[@]}" "ftp://$SERVER/" | awk '{print $NF}' | head -12 | while IFS= read -r n; do echo "::warning::login-dir entry: $n"; done
+            echo "::error::No FTP path serves crypsurance.io - see warnings above (server IP, dir listings, index.html size) to identify the mismatch"
             exit 1
           fi
-          echo "::notice::Docroot discovered: FTP prefix '$FOUND'"
+          echo "::notice::Docroot confirmed at prefix '$FOUND' - deploying"
 
-          # --- 2. full deploy into the discovered docroot --------------------
           cd out
           args=()
           count=0
@@ -75,7 +80,6 @@ jobs:
             args+=( -T "$f" "ftp://$SERVER/$FOUND/$rel" )
             count=$((count+1))
           done < <(find . -type f | sort)
-          echo "uploading $count files to prefix '$FOUND'"
           curl -sS --ftp-create-dirs --retry 2 --retry-delay 3 --connect-timeout 20 "${AUTH[@]}" "${args[@]}" 2> curl.err
           code=$?
           echo "::warning::upload exit=$code for $count files"
@@ -84,7 +88,6 @@ jobs:
             exit $code
           fi
 
-          # --- 3. verify the LIVE site serves this build ---------------------
           sleep 5
           if curl -s "https://crypsurance.io/?cb=$(date +%s)" | grep -q 'deploy-check'; then
             echo "::notice::LIVE VERIFIED - crypsurance.io is serving this build"
