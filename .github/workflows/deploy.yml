@@ -29,7 +29,11 @@ jobs:
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: ./out/
-          server-dir: /public_html/
+          # crypsurance.io's real document root on Hostinger. The main FTP
+          # account logs in at /home/<user>/, so the domain's public_html is
+          # under domains/<domain>/ — NOT the top-level /public_html/ (that's
+          # the primary domain and was silently swallowing every deploy).
+          server-dir: ./domains/crypsurance.io/public_html/
           exclude: |
             **/.git*
             **/.git*/**
