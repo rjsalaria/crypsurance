@@ -40,11 +40,24 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq lftp
+          # Sequential transfer (Hostinger caps concurrent FTP connections),
+          # with reconnect/retries so a dropped control channel resumes instead
+          # of aborting. Log is captured to the job summary for diagnosis.
           lftp -e "
             set ftp:ssl-allow no;
-            set net:max-retries 3;
-            set net:timeout 25;
-            set mirror:parallel-transfer-count 4;
-            mirror -R --verbose ./out/ ./;
+            set ssl:verify-certificate no;
+            set net:max-retries 5;
+            set net:timeout 30;
+            set net:reconnect-interval-base 5;
+            set mirror:parallel-transfer-count 1;
+            mirror -R --continue --verbose ./out/ ./;
             bye
-          " -u "$FTP_USERNAME","$FTP_PASSWORD" "$FTP_SERVER"
+          " -u "$FTP_USERNAME","$FTP_PASSWORD" "$FTP_SERVER" > lftp.log 2>&1
+          code=$?
+          {
+            echo "## lftp deploy log (exit code $code)"
+            echo '```'
+            tail -c 9000 lftp.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $code
