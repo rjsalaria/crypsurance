@@ -3,6 +3,10 @@ name: Deploy to Hostinger
 on:
   push:
     branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
 
 jobs:
   build-and-deploy:
@@ -22,101 +26,32 @@ jobs:
       - name: Build
         run: npm run build
 
-      # Diagnose-then-deploy over plain FTP with curl.
-      # Reads the known docroot over FTP first: if its index.html matches the
-      # live site (same server), a beacon write confirms serving, then the full
-      # deploy runs and the live homepage is verified. Every probe result is
-      # annotated so the run page tells the whole story.
-      - name: Diagnose and deploy
-        env:
-          FTP_SERVER: ${{ secrets.FTP_SERVER }}
-          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
-          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+      # FTP deployment is impossible on this hosting: the website is served
+      # from isolated per-site storage that the FTP account cannot see
+      # (proven by 20+ diagnostic runs - a File-Manager-created tracer file
+      # was unreachable from every FTP path). Instead, publish the built site
+      # to the hostinger-deploy branch; hPanel's GIT feature (running inside
+      # the website's own container) pulls that branch into the docroot.
+      - name: Publish build to hostinger-deploy branch
         shell: bash
         run: |
-          set +e
-          SERVER=$(printf '%s' "$FTP_SERVER" | tr -d '[:space:]' | sed -E 's#^[a-zA-Z]+://##; s#/.*$##')
-          AUTH=(--user "$FTP_USERNAME:$FTP_PASSWORD")
-          DOC="domains/crypsurance.io/public_html"
-
-          HOSTONLY=${SERVER%%:*}
-          IP=$(getent hosts "$HOSTONLY" | awk '{print $1}' | head -1)
-          echo "::warning::FTP server resolves to ${IP:-unresolvable}"
-          # crypsurance.io is hosted on 194.195.84.78 (server736, per hPanel).
-          # Uploading to any other address deploys to the wrong machine.
-          if [ "$HOSTONLY" = "194.195.84.78" ] || [ "$IP" = "194.195.84.78" ]; then
-            echo "::warning::FTP server IS the crypsurance.io hosting box 194.195.84.78"
-          else
-            echo "::error::FTP_SERVER secret does not point at 194.195.84.78 - it targets a different machine; update the secret to 194.195.84.78"
-          fi
-          # The main hosting FTP account is u883708131 (public in hPanel).
-          # A custom FTP account is jailed to its own folder the webserver
-          # never serves — verify which one the secret actually holds.
-          if [ "$(printf '%s' "$FTP_USERNAME" | tr -d '[:space:]')" = "u883708131" ]; then
-            echo "::warning::FTP username IS the main account u883708131"
-          else
-            echo "::warning::FTP username is NOT u883708131 (len=$(printf '%s' "$FTP_USERNAME" | tr -d '[:space:]' | wc -c)) - likely a jailed custom account"
-          fi
-
-          # Ask the origin server directly (bypassing the CDN) what it serves
-          # for crypsurance.io — separates CDN-cache staleness from a
-          # mis-wired origin. 194.195.84.78 = hosting IP per hPanel.
-          for scheme in https http; do
-            osize=$(curl -sk --connect-timeout 12 "$scheme://194.195.84.78/" -H "Host: crypsurance.io" | wc -c)
-            omark=$(curl -sk --connect-timeout 12 "$scheme://194.195.84.78/" -H "Host: crypsurance.io" | grep -c deploy-check)
-            echo "::warning::origin-direct $scheme: size=$osize deploy-check=$omark (new build=67949 w/ marker, old=67786)"
-          done
-
-          curl -s "${AUTH[@]}" "ftp://$SERVER/" > root.lst
-          echo "::warning::login-dir entries: $(awk '{print $NF}' root.lst | grep -v -e '^\.$' -e '^\.\.$' | paste -sd ' ' - | head -c 400)"
-
-          curl -s "${AUTH[@]}" "ftp://$SERVER/$DOC/" > doc.lst; lc=$?
-          echo "::warning::list $DOC exit=$lc entries: $(awk '{print $NF}' doc.lst | grep -v -e '^\.$' -e '^\.\.$' | paste -sd ' ' - | head -c 400)"
-
-          curl -s "${AUTH[@]}" "ftp://$SERVER/$DOC/index.html" -o idx.html; fc=$?
-          echo "::warning::fetch $DOC/index.html exit=$fc size=$( [ -f idx.html ] && wc -c < idx.html || echo 0 ) (live site serves 67786 bytes)"
-
-          # The user created fm-test.txt through File Manager, which provably
-          # writes to the live docroot (it serves at crypsurance.io/fm-test.txt).
-          # Search the FTP tree for that file — wherever FTP can fetch it,
-          # THAT is the active docroot, whatever it happens to be named.
-          CANDS=("." "public_html")
-          doms=$(curl -s "${AUTH[@]}" "ftp://$SERVER/domains/" | awk '{print $NF}' | grep -v -e '^\.$' -e '^\.\.$')
-          for d in $doms; do CANDS+=("domains/$d/public_html" "domains/$d"); done
-          FOUND=""
-          for c in "${CANDS[@]}"; do
-            body=$(curl -s --connect-timeout 15 "${AUTH[@]}" "ftp://$SERVER/$c/fm-test.txt" 2>/dev/null)
-            ok=$?
-            echo "::warning::probe $c/fm-test.txt exit=$ok len=${#body}"
-            if [ "$ok" = "0" ] && [ -n "$body" ] && [ -z "$FOUND" ]; then FOUND="$c"; fi
-          done
-
-          if [ -z "$FOUND" ]; then
-            echo "::error::fm-test.txt is not reachable anywhere in the FTP tree - the FTP account cannot see the active docroot; switch to Hostinger Git deployment"
-            exit 1
-          fi
-          echo "::notice::ACTIVE DOCROOT FOUND via fm-test.txt at prefix '$FOUND' - deploying"
-
           cd out
-          args=()
-          count=0
-          while IFS= read -r f; do
-            rel="${f#./}"
-            args+=( -T "$f" "ftp://$SERVER/$FOUND/$rel" )
-            count=$((count+1))
-          done < <(find . -type f | sort)
-          curl -sS --ftp-create-dirs --retry 2 --retry-delay 3 --connect-timeout 20 "${AUTH[@]}" "${args[@]}" 2> curl.err
-          code=$?
-          echo "::warning::upload exit=$code for $count files"
-          if [ $code -ne 0 ]; then
-            head -5 curl.err | while IFS= read -r l; do echo "::error::$l"; done
-            exit $code
-          fi
+          git init -q -b hostinger-deploy
+          git add -A
+          git -c user.email="actions@github.com" -c user.name="deploy-bot"             commit -qm "deploy ${GITHUB_SHA:0:7}"
+          git push -f "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" hostinger-deploy
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-          sleep 5
+      # Give Hostinger's auto-deployment webhook time to pull, then check the
+      # live site. Until hPanel GIT is configured this stays red - honestly.
+      - name: Verify live site serves this build
+        shell: bash
+        run: |
+          sleep 60
           if curl -s "https://crypsurance.io/?cb=$(date +%s)" | grep -q 'deploy-check'; then
             echo "::notice::LIVE VERIFIED - crypsurance.io is serving this build"
           else
-            echo "::error::Upload finished but the live site still serves an old build"
+            echo "::error::Live site does not serve this build yet. If hPanel GIT auto-deployment is configured, check its deploy log; otherwise press Deploy in hPanel -> Advanced -> GIT."
             exit 1
           fi
