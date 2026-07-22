@@ -43,6 +43,15 @@ jobs:
           IP=$(getent hosts "$HOSTONLY" | awk '{print $1}' | head -1)
           echo "::warning::FTP server resolves to ${IP:-unresolvable}"
 
+          # Ask the origin server directly (bypassing the CDN) what it serves
+          # for crypsurance.io — separates CDN-cache staleness from a
+          # mis-wired origin. 194.195.84.78 = hosting IP per hPanel.
+          for scheme in https http; do
+            osize=$(curl -sk --connect-timeout 12 "$scheme://194.195.84.78/" -H "Host: crypsurance.io" | wc -c)
+            omark=$(curl -sk --connect-timeout 12 "$scheme://194.195.84.78/" -H "Host: crypsurance.io" | grep -c deploy-check)
+            echo "::warning::origin-direct $scheme: size=$osize deploy-check=$omark (new build=67949 w/ marker, old=67786)"
+          done
+
           curl -s "${AUTH[@]}" "ftp://$SERVER/" > root.lst
           echo "::warning::login-dir entries: $(awk '{print $NF}' root.lst | grep -v -e '^\.$' -e '^\.\.$' | paste -sd ' ' - | head -c 400)"
 
