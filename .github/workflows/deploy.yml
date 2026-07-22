@@ -42,6 +42,14 @@ jobs:
           HOSTONLY=${SERVER%%:*}
           IP=$(getent hosts "$HOSTONLY" | awk '{print $1}' | head -1)
           echo "::warning::FTP server resolves to ${IP:-unresolvable}"
+          # The main hosting FTP account is u883708131 (public in hPanel).
+          # A custom FTP account is jailed to its own folder the webserver
+          # never serves — verify which one the secret actually holds.
+          if [ "$(printf '%s' "$FTP_USERNAME" | tr -d '[:space:]')" = "u883708131" ]; then
+            echo "::warning::FTP username IS the main account u883708131"
+          else
+            echo "::warning::FTP username is NOT u883708131 (len=$(printf '%s' "$FTP_USERNAME" | tr -d '[:space:]' | wc -c)) - likely a jailed custom account"
+          fi
 
           # Ask the origin server directly (bypassing the CDN) what it serves
           # for crypsurance.io — separates CDN-cache staleness from a
