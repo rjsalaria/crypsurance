@@ -44,7 +44,24 @@ const POOL_WALLET = new PublicKey("9txXv5nFKu4E9AmykbcLGSRiyxM19C81HJqFmJbsBkxy"
 const MEMO_PROGRAM = new PublicKey("Memo1UhkJRfHyvLMcVucJwxXeuD728EqVDDwQDxFMNo");
 const DECIMALS = 9n;
 const PAY = process.argv.includes("--pay");
-const RPC = process.env.RPC_URL || "https://api.devnet.solana.com";
+
+// Tolerate common secret-paste mistakes: surrounding quotes/whitespace, or the
+// whole "NAME=value" line pasted into the value box.
+function cleanEnv(v, name) {
+  if (!v) return v;
+  let s = v.trim().replace(/^["']|["']$/g, "").trim();
+  if (name && s.startsWith(name + "=")) s = s.slice(name.length + 1).trim();
+  return s;
+}
+function cleanUrl(v) {
+  const s = cleanEnv(v, "RPC_URL");
+  if (!s) return s;
+  if (/^https?:\/\//i.test(s)) return s;
+  const m = s.match(/https?:\/\/\S+/i); // pull the URL out of anything wrapped around it
+  return m ? m[0] : s;
+}
+
+const RPC = cleanUrl(process.env.RPC_URL) || "https://api.devnet.solana.com";
 
 function argValue(name) {
   const i = process.argv.indexOf(name);
@@ -65,7 +82,7 @@ function loadSecretKey() {
 async function verifyFlight(flight, date) {
   if (flight.startsWith("TEST-DELAY")) return { delayed: true, basis: "testnet-simulated" };
   if (flight.startsWith("TEST-ONTIME")) return { delayed: false, basis: "testnet-simulated" };
-  const key = process.env.AVIATIONSTACK_KEY;
+  const key = cleanEnv(process.env.AVIATIONSTACK_KEY, "AVIATIONSTACK_KEY");
   if (!key) return { skip: true, reason: "real flight, no AVIATIONSTACK_KEY set" };
   // free tier rejects the flight_date param (function_access_restricted),
   // so query by flight number only and match the date client-side
