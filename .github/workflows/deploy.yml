@@ -29,11 +29,12 @@ jobs:
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: ./out/
-          # crypsurance.io's real document root on Hostinger. The main FTP
-          # account logs in at /home/<user>/, so the domain's public_html is
-          # under domains/<domain>/ — NOT the top-level /public_html/ (that's
-          # the primary domain and was silently swallowing every deploy).
-          server-dir: ./domains/crypsurance.io/public_html/
+          # The FTP account is domain-scoped: it logs in directly at
+          # /home/u883708131/domains/crypsurance.io/public_html — which IS the
+          # live document root. So upload into the login folder itself ("./").
+          # Any deeper path (e.g. /public_html/) just creates junk sub-folders
+          # INSIDE the site root, which is why earlier deploys never went live.
+          server-dir: ./
           exclude: |
             **/.git*
             **/.git*/**
