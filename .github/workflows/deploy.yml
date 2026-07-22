@@ -22,18 +22,14 @@ jobs:
       - name: Build
         run: npm run build
 
-      # Upload with curl over plain FTP — the transport the connectivity
-      # probe proved works end-to-end (connect, login, data channel). lftp and
-      # FTP-Deploy-Action both failed against this server; curl is the one
-      # tool verified against it.
-      #
-      # The FTP account is domain-scoped: it logs in directly at
-      # /home/u883708131/domains/crypsurance.io/public_html, which IS the live
-      # document root — so files upload to "./". One curl invocation carries a
-      # -T/URL pair per file, reusing the connection instead of logging in 90
-      # times (shared hosts rate-limit logins). Only adds/overwrites — nothing
-      # else on the server (subdomain folder, .htaccess) can be removed.
-      - name: Deploy via curl FTP
+      # Deploy over plain FTP with curl (the transport the probe verified).
+      # The FTP login directory turned out NOT to be the serving docroot:
+      # uploads reported success but the live site never changed. So this step
+      # DISCOVERS the docroot empirically: it uploads tiny beacon files to
+      # candidate paths and checks which one becomes reachable on
+      # https://crypsurance.io, deploys there, then verifies the live site
+      # serves the new build - failing loudly if it does not.
+      - name: Discover docroot and deploy
         env:
           FTP_SERVER: ${{ secrets.FTP_SERVER }}
           FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
@@ -41,32 +37,58 @@ jobs:
         shell: bash
         run: |
           set +e
-          # Tolerate common secret-paste mistakes (scheme prefix, whitespace).
           SERVER=$(printf '%s' "$FTP_SERVER" | tr -d '[:space:]' | sed -E 's#^[a-zA-Z]+://##; s#/.*$##')
+          AUTH=(--user "$FTP_USERNAME:$FTP_PASSWORD")
+          TS=$(date +%s)
 
+          # --- 1. beacon discovery -------------------------------------------
+          tags=(root domains pub)
+          prefixes=("." "domains/crypsurance.io/public_html" "public_html")
+          for i in 0 1 2; do
+            echo "beacon-${tags[$i]}" > /tmp/beacon.txt
+            curl -sS --ftp-create-dirs "${AUTH[@]}" -T /tmp/beacon.txt "ftp://$SERVER/${prefixes[$i]}/deploy-beacon-${tags[$i]}-$TS.txt"
+          done
+          sleep 4
+          FOUND=""
+          for i in 0 1 2; do
+            codehttp=$(curl -s -o /dev/null -w '%{http_code}' "https://crypsurance.io/deploy-beacon-${tags[$i]}-$TS.txt")
+            echo "::warning::beacon ${tags[$i]} (prefix '${prefixes[$i]}') -> HTTP $codehttp"
+            if [ "$codehttp" = "200" ] && [ -z "$FOUND" ]; then FOUND="${prefixes[$i]}"; fi
+          done
+          # clean up beacons regardless of outcome
+          for i in 0 1 2; do
+            curl -s "${AUTH[@]}" "ftp://$SERVER/" -Q "DELE ${prefixes[$i]}/deploy-beacon-${tags[$i]}-$TS.txt" -o /dev/null
+          done
+          if [ -z "$FOUND" ]; then
+            echo "::error::No beacon became publicly reachable - the FTP account cannot reach the crypsurance.io docroot from any known path. Listing login dir entries for diagnosis:"
+            curl -s "${AUTH[@]}" "ftp://$SERVER/" | awk '{print $NF}' | head -12 | while IFS= read -r n; do echo "::warning::login-dir entry: $n"; done
+            exit 1
+          fi
+          echo "::notice::Docroot discovered: FTP prefix '$FOUND'"
+
+          # --- 2. full deploy into the discovered docroot --------------------
           cd out
           args=()
           count=0
           while IFS= read -r f; do
             rel="${f#./}"
-            args+=( -T "$f" "ftp://$SERVER/$rel" )
+            args+=( -T "$f" "ftp://$SERVER/$FOUND/$rel" )
             count=$((count+1))
           done < <(find . -type f | sort)
-
-          echo "uploading $count files"
-          curl -sS --ftp-create-dirs --retry 2 --retry-delay 3             --connect-timeout 20             --user "$FTP_USERNAME:$FTP_PASSWORD" "${args[@]}" 2> curl.err
+          echo "uploading $count files to prefix '$FOUND'"
+          curl -sS --ftp-create-dirs --retry 2 --retry-delay 3 --connect-timeout 20 "${AUTH[@]}" "${args[@]}" 2> curl.err
           code=$?
-          echo "::warning::curl upload exit=$code for $count files"
+          echo "::warning::upload exit=$code for $count files"
           if [ $code -ne 0 ]; then
             head -5 curl.err | while IFS= read -r l; do echo "::error::$l"; done
             exit $code
           fi
 
-          # Self-verify: the built index.html carries a deploy-check meta tag;
-          # confirm the live site is actually serving the new build.
+          # --- 3. verify the LIVE site serves this build ---------------------
           sleep 5
           if curl -s "https://crypsurance.io/?cb=$(date +%s)" | grep -q 'deploy-check'; then
             echo "::notice::LIVE VERIFIED - crypsurance.io is serving this build"
           else
-            echo "::warning::Upload succeeded but live page does not show the new marker yet"
+            echo "::error::Upload finished but the live site still serves an old build"
+            exit 1
           fi
