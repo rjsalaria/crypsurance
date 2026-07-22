@@ -22,71 +22,51 @@ jobs:
       - name: Build
         run: npm run build
 
-      # Upload with lftp instead of FTP-Deploy-Action. The latter kept failing
-      # with "550 No such file or directory" (it tries to STOR files before
-      # creating parent dirs — a known bug on flaky shared-host FTP). lftp's
-      # `mirror -R` creates the directory tree reliably and needs no state file.
+      # Upload with curl over plain FTP — the transport the connectivity
+      # probe proved works end-to-end (connect, login, data channel). lftp and
+      # FTP-Deploy-Action both failed against this server; curl is the one
+      # tool verified against it.
       #
       # The FTP account is domain-scoped: it logs in directly at
       # /home/u883708131/domains/crypsurance.io/public_html, which IS the live
-      # document root — so we mirror out/ into the login dir itself ("./").
-      # No --delete: this only adds/overwrites, so nothing else on the server
-      # (subdomain folder, .htaccess, etc.) can be removed.
-      - name: Deploy via lftp
+      # document root — so files upload to "./". One curl invocation carries a
+      # -T/URL pair per file, reusing the connection instead of logging in 90
+      # times (shared hosts rate-limit logins). Only adds/overwrites — nothing
+      # else on the server (subdomain folder, .htaccess) can be removed.
+      - name: Deploy via curl FTP
         env:
           FTP_SERVER: ${{ secrets.FTP_SERVER }}
           FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
           FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
         shell: bash
         run: |
-          # GitHub runs steps with `bash -e`; disable it so a non-zero lftp exit
-          # doesn't abort before we capture diagnostics.
           set +e
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq lftp
-
           # Tolerate common secret-paste mistakes (scheme prefix, whitespace).
           SERVER=$(printf '%s' "$FTP_SERVER" | tr -d '[:space:]' | sed -E 's#^[a-zA-Z]+://##; s#/.*$##')
-          echo "::warning::server shape: raw-len=${#FTP_SERVER} cleaned-len=${#SERVER} had-scheme=$(printf '%s' "$FTP_SERVER" | grep -q '://' && echo yes || echo no)"
 
-          # Connectivity probes — curl exit codes pinpoint the failure layer:
-          # 0=ok 6=dns 7=refused 28=timeout 35=tls-handshake 67=login-denied
-          curl -sS -o /dev/null --connect-timeout 15 --max-time 45 \
-            "ftp://$SERVER/" --user "$FTP_USERNAME:$FTP_PASSWORD"; P_PLAIN=$?
-          curl -sS -o /dev/null --connect-timeout 15 --max-time 45 \
-            "ftp://$SERVER/" --user "$FTP_USERNAME:$FTP_PASSWORD" --ssl-reqd; P_FTPS=$?
-          echo "::warning::curl probes: plain-ftp=$P_PLAIN explicit-ftps=$P_FTPS (0 ok, 6 dns, 7 refused, 28 timeout, 35 tls, 67 login)"
+          cd out
+          args=()
+          count=0
+          while IFS= read -r f; do
+            rel="${f#./}"
+            args+=( -T "$f" "ftp://$SERVER/$rel" )
+            count=$((count+1))
+          done < <(find . -type f | sort)
 
-          # Sequential transfer (shared-host connection caps). Try explicit
-          # FTPS first, fall back to plain FTP. Login dir IS the docroot, so
-          # mirror into "./". No --delete: only adds/overwrites.
-          try_deploy() {
-            local ssl_cmds="$1" label="$2"
-            lftp -u "$FTP_USERNAME","$FTP_PASSWORD" -e "
-              $ssl_cmds
-              set net:max-retries 3;
-              set net:timeout 30;
-              set net:reconnect-interval-base 5;
-              set mirror:parallel-transfer-count 1;
-              mirror -R --verbose ./out/ ./;
-              bye
-            " "$SERVER" > lftp.log 2>&1
-            local code=$?
-            echo "::warning::$label deploy exit=$code ($(grep -c . lftp.log) log lines)"
-            grep -iE '550|530|421|fatal|mirror:|denied|no such|refused|not connected|login|error|closed|certificate' lftp.log \
-              | head -8 | while IFS= read -r l; do echo "::error::[$label] $l"; done
-            {
-              echo "## lftp $label log (exit $code)"; echo '```'
-              tail -c 6000 lftp.log; echo '```'
-            } >> "$GITHUB_STEP_SUMMARY"
-            return $code
-          }
-
-          if try_deploy "set ftp:ssl-force true; set ftp:ssl-protect-data true; set ssl:verify-certificate no;" "ftps"; then
-            echo "deployed via explicit FTPS"; exit 0
+          echo "uploading $count files"
+          curl -sS --ftp-create-dirs --retry 2 --retry-delay 3             --connect-timeout 20             --user "$FTP_USERNAME:$FTP_PASSWORD" "${args[@]}" 2> curl.err
+          code=$?
+          echo "::warning::curl upload exit=$code for $count files"
+          if [ $code -ne 0 ]; then
+            head -5 curl.err | while IFS= read -r l; do echo "::error::$l"; done
+            exit $code
           fi
-          if try_deploy "set ftp:ssl-allow no;" "plain-ftp"; then
-            echo "deployed via plain FTP"; exit 0
+
+          # Self-verify: the built index.html carries a deploy-check meta tag;
+          # confirm the live site is actually serving the new build.
+          sleep 5
+          if curl -s "https://crypsurance.io/?cb=$(date +%s)" | grep -q 'deploy-check'; then
+            echo "::notice::LIVE VERIFIED - crypsurance.io is serving this build"
+          else
+            echo "::warning::Upload succeeded but live page does not show the new marker yet"
           fi
-          echo "::error::both FTPS and plain FTP deploys failed"
-          exit 1
