@@ -38,6 +38,11 @@ export const metadata: Metadata = {
     description:
       "Instant, trustless cover built on smart contracts. Powered by SURETY.",
   },
+  // Invisible marker to confirm the push → GitHub Action → Hostinger deploy
+  // pipeline is live. Check via view-source on crypsurance.io.
+  other: {
+    "deploy-check": "pipeline-verified-2026-07-22",
+  },
 };
 
 export default function RootLayout({
