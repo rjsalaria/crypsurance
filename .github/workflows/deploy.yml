@@ -22,20 +22,29 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: FTP Deploy
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          local-dir: ./out/
-          # The FTP account is domain-scoped: it logs in directly at
-          # /home/u883708131/domains/crypsurance.io/public_html — which IS the
-          # live document root. So upload into the login folder itself ("./").
-          # Any deeper path (e.g. /public_html/) just creates junk sub-folders
-          # INSIDE the site root, which is why earlier deploys never went live.
-          server-dir: ./
-          exclude: |
-            **/.git*
-            **/.git*/**
-            **/node_modules/**
+      # Upload with lftp instead of FTP-Deploy-Action. The latter kept failing
+      # with "550 No such file or directory" (it tries to STOR files before
+      # creating parent dirs — a known bug on flaky shared-host FTP). lftp's
+      # `mirror -R` creates the directory tree reliably and needs no state file.
+      #
+      # The FTP account is domain-scoped: it logs in directly at
+      # /home/u883708131/domains/crypsurance.io/public_html, which IS the live
+      # document root — so we mirror out/ into the login dir itself ("./").
+      # No --delete: this only adds/overwrites, so nothing else on the server
+      # (subdomain folder, .htaccess, etc.) can be removed.
+      - name: Deploy via lftp
+        env:
+          FTP_SERVER: ${{ secrets.FTP_SERVER }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq lftp
+          lftp -e "
+            set ftp:ssl-allow no;
+            set net:max-retries 3;
+            set net:timeout 25;
+            set mirror:parallel-transfer-count 4;
+            mirror -R --verbose ./out/ ./;
+            bye
+          " -u "$FTP_USERNAME","$FTP_PASSWORD" "$FTP_SERVER"
