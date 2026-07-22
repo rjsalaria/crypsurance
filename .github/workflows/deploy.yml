@@ -76,28 +76,26 @@ jobs:
           curl -s "${AUTH[@]}" "ftp://$SERVER/$DOC/index.html" -o idx.html; fc=$?
           echo "::warning::fetch $DOC/index.html exit=$fc size=$( [ -f idx.html ] && wc -c < idx.html || echo 0 ) (live site serves 67786 bytes)"
 
-          TS=$(date +%s)
+          # The user created fm-test.txt through File Manager, which provably
+          # writes to the live docroot (it serves at crypsurance.io/fm-test.txt).
+          # Search the FTP tree for that file — wherever FTP can fetch it,
+          # THAT is the active docroot, whatever it happens to be named.
+          CANDS=("." "public_html")
+          doms=$(curl -s "${AUTH[@]}" "ftp://$SERVER/domains/" | awk '{print $NF}' | grep -v -e '^\.$' -e '^\.\.$')
+          for d in $doms; do CANDS+=("domains/$d/public_html" "domains/$d"); done
           FOUND=""
-          # hPanel FTP Details names "public_html" as the File Upload Path —
-          # the serving docroot is login-root/public_html; the look-alike
-          # domains/crypsurance.io/public_html on the same server is a ghost
-          # from an older domain configuration (verified: writes there never
-          # appear on the live site).
-          for prefix in "public_html" "$DOC" "."; do
-            echo "beacon" > b.txt
-            curl -sS "${AUTH[@]}" --ftp-create-dirs -T b.txt "ftp://$SERVER/$prefix/beacon-$TS.txt" 2> up.err; uc=$?
-            sleep 4
-            http=$(curl -s -o /dev/null -w '%{http_code}' "https://crypsurance.io/beacon-$TS.txt?x=$RANDOM")
-            echo "::warning::beacon prefix='$prefix' upload-exit=$uc live-http=$http $(head -c 120 up.err)"
-            curl -s "${AUTH[@]}" "ftp://$SERVER/" -Q "DELE $prefix/beacon-$TS.txt" -o /dev/null
-            if [ "$uc" = "0" ] && [ "$http" = "200" ] && [ -z "$FOUND" ]; then FOUND="$prefix"; fi
+          for c in "${CANDS[@]}"; do
+            body=$(curl -s --connect-timeout 15 "${AUTH[@]}" "ftp://$SERVER/$c/fm-test.txt" 2>/dev/null)
+            ok=$?
+            echo "::warning::probe $c/fm-test.txt exit=$ok len=${#body}"
+            if [ "$ok" = "0" ] && [ -n "$body" ] && [ -z "$FOUND" ]; then FOUND="$c"; fi
           done
 
           if [ -z "$FOUND" ]; then
-            echo "::error::No FTP path serves crypsurance.io - see warnings above (server IP, dir listings, index.html size) to identify the mismatch"
+            echo "::error::fm-test.txt is not reachable anywhere in the FTP tree - the FTP account cannot see the active docroot; switch to Hostinger Git deployment"
             exit 1
           fi
-          echo "::notice::Docroot confirmed at prefix '$FOUND' - deploying"
+          echo "::notice::ACTIVE DOCROOT FOUND via fm-test.txt at prefix '$FOUND' - deploying"
 
           cd out
           args=()
