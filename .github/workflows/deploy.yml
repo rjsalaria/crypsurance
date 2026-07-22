@@ -40,35 +40,53 @@ jobs:
         shell: bash
         run: |
           # GitHub runs steps with `bash -e`; disable it so a non-zero lftp exit
-          # doesn't abort before we capture the log to the job summary.
+          # doesn't abort before we capture diagnostics.
           set +e
           sudo apt-get update -qq
           sudo apt-get install -y -qq lftp
-          # Sequential transfer (Hostinger caps concurrent FTP connections),
-          # with reconnect/retries so a dropped control channel resumes instead
-          # of aborting. Log is captured to the job summary for diagnosis.
-          lftp -e "
-            set ftp:ssl-allow no;
-            set ssl:verify-certificate no;
-            set net:max-retries 5;
-            set net:timeout 30;
-            set net:reconnect-interval-base 5;
-            set mirror:parallel-transfer-count 1;
-            debug 3;
-            mirror -R --continue --verbose ./out/ ./;
-            bye
-          " -u "$FTP_USERNAME","$FTP_PASSWORD" "$FTP_SERVER" > lftp.log 2>&1
-          code=$?
-          echo "===== lftp.log (exit $code) ====="
-          cat lftp.log
-          # Surface the outcome as annotations (these render on public run pages).
-          echo "::warning::lftp exit code $code, $(grep -c . lftp.log) log lines"
-          grep -iE '550|530|421|fatal|mirror:|denied|no such|refused|not connected|login|error|closed' lftp.log \
-            | head -15 | while IFS= read -r line; do echo "::error::$line"; done
-          {
-            echo "## lftp deploy log (exit code $code)"
-            echo '```'
-            tail -c 9000 lftp.log
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-          exit $code
+
+          # Tolerate common secret-paste mistakes (scheme prefix, whitespace).
+          SERVER=$(printf '%s' "$FTP_SERVER" | tr -d '[:space:]' | sed -E 's#^[a-zA-Z]+://##; s#/.*$##')
+          echo "::warning::server shape: raw-len=${#FTP_SERVER} cleaned-len=${#SERVER} had-scheme=$(printf '%s' "$FTP_SERVER" | grep -q '://' && echo yes || echo no)"
+
+          # Connectivity probes — curl exit codes pinpoint the failure layer:
+          # 0=ok 6=dns 7=refused 28=timeout 35=tls-handshake 67=login-denied
+          curl -sS -o /dev/null --connect-timeout 15 --max-time 45 \
+            "ftp://$SERVER/" --user "$FTP_USERNAME:$FTP_PASSWORD"; P_PLAIN=$?
+          curl -sS -o /dev/null --connect-timeout 15 --max-time 45 \
+            "ftp://$SERVER/" --user "$FTP_USERNAME:$FTP_PASSWORD" --ssl-reqd; P_FTPS=$?
+          echo "::warning::curl probes: plain-ftp=$P_PLAIN explicit-ftps=$P_FTPS (0 ok, 6 dns, 7 refused, 28 timeout, 35 tls, 67 login)"
+
+          # Sequential transfer (shared-host connection caps). Try explicit
+          # FTPS first, fall back to plain FTP. Login dir IS the docroot, so
+          # mirror into "./". No --delete: only adds/overwrites.
+          try_deploy() {
+            local ssl_cmds="$1" label="$2"
+            lftp -u "$FTP_USERNAME","$FTP_PASSWORD" -e "
+              $ssl_cmds
+              set net:max-retries 3;
+              set net:timeout 30;
+              set net:reconnect-interval-base 5;
+              set mirror:parallel-transfer-count 1;
+              mirror -R --verbose ./out/ ./;
+              bye
+            " "$SERVER" > lftp.log 2>&1
+            local code=$?
+            echo "::warning::$label deploy exit=$code ($(grep -c . lftp.log) log lines)"
+            grep -iE '550|530|421|fatal|mirror:|denied|no such|refused|not connected|login|error|closed|certificate' lftp.log \
+              | head -8 | while IFS= read -r l; do echo "::error::[$label] $l"; done
+            {
+              echo "## lftp $label log (exit $code)"; echo '```'
+              tail -c 6000 lftp.log; echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            return $code
+          }
+
+          if try_deploy "set ftp:ssl-force true; set ftp:ssl-protect-data true; set ssl:verify-certificate no;" "ftps"; then
+            echo "deployed via explicit FTPS"; exit 0
+          fi
+          if try_deploy "set ftp:ssl-allow no;" "plain-ftp"; then
+            echo "deployed via plain FTP"; exit 0
+          fi
+          echo "::error::both FTPS and plain FTP deploys failed"
+          exit 1
