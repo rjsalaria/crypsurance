@@ -44,12 +44,10 @@ jobs:
           echo "::warning::FTP server resolves to ${IP:-unresolvable}"
 
           curl -s "${AUTH[@]}" "ftp://$SERVER/" > root.lst
-          echo "::warning::login-dir entries: $(awk '{print $NF}' root.lst | grep -v '^\.$\|^\.\.$' | tr '
-' ' ' | head -c 400)"
+          echo "::warning::login-dir entries: $(awk '{print $NF}' root.lst | grep -v -e '^\.$' -e '^\.\.$' | paste -sd ' ' - | head -c 400)"
 
           curl -s "${AUTH[@]}" "ftp://$SERVER/$DOC/" > doc.lst; lc=$?
-          echo "::warning::list $DOC exit=$lc entries: $(awk '{print $NF}' doc.lst | grep -v '^\.$\|^\.\.$' | tr '
-' ' ' | head -c 400)"
+          echo "::warning::list $DOC exit=$lc entries: $(awk '{print $NF}' doc.lst | grep -v -e '^\.$' -e '^\.\.$' | paste -sd ' ' - | head -c 400)"
 
           curl -s "${AUTH[@]}" "ftp://$SERVER/$DOC/index.html" -o idx.html; fc=$?
           echo "::warning::fetch $DOC/index.html exit=$fc size=$( [ -f idx.html ] && wc -c < idx.html || echo 0 ) (live site serves 67786 bytes)"
