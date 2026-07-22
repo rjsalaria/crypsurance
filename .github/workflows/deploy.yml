@@ -54,10 +54,17 @@ jobs:
             set net:timeout 30;
             set net:reconnect-interval-base 5;
             set mirror:parallel-transfer-count 1;
+            debug 3;
             mirror -R --continue --verbose ./out/ ./;
             bye
           " -u "$FTP_USERNAME","$FTP_PASSWORD" "$FTP_SERVER" > lftp.log 2>&1
           code=$?
+          echo "===== lftp.log (exit $code) ====="
+          cat lftp.log
+          # Surface the outcome as annotations (these render on public run pages).
+          echo "::warning::lftp exit code $code, $(grep -c . lftp.log) log lines"
+          grep -iE '550|530|421|fatal|mirror:|denied|no such|refused|not connected|login|error|closed' lftp.log \
+            | head -15 | while IFS= read -r line; do echo "::error::$line"; done
           {
             echo "## lftp deploy log (exit code $code)"
             echo '```'
