@@ -37,21 +37,33 @@ h4,
 /* ---------- glass + glow ---------- */
 
 .glass-card {
-  /* Slightly higher base opacity so the card still reads as frosted with a
-     lighter blur. Blur is the single most expensive thing to recompute while
-     scrolling (nav + every card sit over the animated blobs), so 14px -> 9px
-     is a big scroll-perf win for a barely perceptible visual change. */
-  background: linear-gradient(
-    145deg,
-    rgba(139, 92, 246, 0.12),
-    rgba(34, 211, 238, 0.07) 55%,
-    rgba(232, 121, 249, 0.08)
-  );
-  /* Let Tailwind/Lightning CSS emit the vendor prefixes — writing
-     -webkit-backdrop-filter by hand makes it drop the standard property. */
-  backdrop-filter: blur(9px);
+  /* No backdrop-filter: re-blurring the animated blob background behind every
+     card on each scroll frame was the main cause of scroll jank. On this dark
+     theme a semi-opaque frosted panel reads almost identically for a fraction
+     of the cost. The tint gradient sits over an opaque base. */
+  background:
+    linear-gradient(
+      145deg,
+      rgba(139, 92, 246, 0.14),
+      rgba(34, 211, 238, 0.06) 55%,
+      rgba(232, 121, 249, 0.1)
+    ),
+    rgba(18, 11, 46, 0.68);
   border: 1px solid rgba(168, 159, 208, 0.18);
   border-radius: 1.25rem;
+}
+
+/* The fixed nav sits over scrolling content — keep it crisp/opaque since it
+   no longer blurs what passes beneath it. */
+header .glass-card {
+  background:
+    linear-gradient(
+      145deg,
+      rgba(139, 92, 246, 0.16),
+      rgba(34, 211, 238, 0.06) 55%,
+      rgba(232, 121, 249, 0.11)
+    ),
+    rgba(10, 6, 26, 0.86);
 }
 
 .glass-card-hover {
@@ -119,6 +131,15 @@ h4,
   will-change: transform;
 }
 
+/* On phones, hold the blobs still — the continuous drift is the biggest
+   remaining source of scroll jank on lower-powered devices, and the ambient
+   gradients still look great static. */
+@media (max-width: 767px) {
+  .blob {
+    animation: none;
+  }
+}
+
 /* ---------- grid overlay ---------- */
 
 .grid-overlay {
@@ -149,30 +170,18 @@ h4,
 /* ---------- hero logo spin + glow ---------- */
 
 @keyframes spin-glow {
-  0% {
-    transform: rotateY(0deg);
-    filter: drop-shadow(0 0 22px rgba(34, 211, 238, 0.5));
-  }
-  25% {
-    filter: drop-shadow(0 0 48px rgba(34, 211, 238, 0.9));
-  }
-  50% {
-    transform: rotateY(180deg);
-    filter: drop-shadow(0 0 22px rgba(139, 92, 246, 0.6));
-  }
-  75% {
-    filter: drop-shadow(0 0 48px rgba(34, 211, 238, 0.9));
-  }
-  100% {
+  to {
     transform: rotateY(360deg);
-    filter: drop-shadow(0 0 22px rgba(34, 211, 238, 0.5));
   }
 }
 
 .animate-spin-glow {
+  /* Rotate only (GPU-composited). The glow is a static drop-shadow instead of
+     an animated filter, which was repainting the logo every frame. */
   animation: spin-glow 9s linear infinite;
   transform-style: preserve-3d;
-  will-change: transform, filter;
+  will-change: transform;
+  filter: drop-shadow(0 0 34px rgba(34, 211, 238, 0.55));
 }
 
 /* ---------- fade-up reveal ---------- */
