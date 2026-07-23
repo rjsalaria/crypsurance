@@ -4,7 +4,7 @@ const blobStyle = (color: string) => ({
 
 export default function Blobs() {
   return (
-    <div className="fixed inset-0 -z-10 overflow-hidden" aria-hidden="true">
+    <div className="blob-layer fixed inset-0 -z-10 overflow-hidden" aria-hidden="true">
       <div
         className="blob h-140 w-140 -top-40 -left-32"
         style={{ ...blobStyle("rgba(139,92,246,0.45)"), animationDelay: "0s" }}
