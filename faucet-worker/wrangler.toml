@@ -1,0 +1,32 @@
+# CrypSurance SURETY devnet faucet — Cloudflare Worker
+#
+# Deploy (from this folder):
+#   1. npm install
+#   2. npx wrangler login
+#   3. npx wrangler kv namespace create FAUCET_KV
+#      -> paste the printed id below into [[kv_namespaces]].id
+#   4. npx wrangler secret put DEVNET_KEYPAIR   (paste the byte array from
+#                                                solana/devnet-test.json)
+#   5. npx wrangler secret put RPC_URL          (your Helius devnet RPC URL)
+#   6. npx wrangler deploy
+#   -> copy the printed https://crypsurance-faucet.<you>.workers.dev URL
+#      into components/Faucet.tsx (FAUCET_ENDPOINT).
+
+name = "crypsurance-faucet"
+main = "src/index.js"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# Non-secret settings (safe to commit)
+[vars]
+FAUCET_AMOUNT = "2500"   # SURETY per request
+COOLDOWN_HOURS = "8"     # per-wallet cooldown
+IP_DAILY_LIMIT = "4"     # max requests per network per cooldown window
+
+# Rate-limit store. Create it with:
+#   npx wrangler kv namespace create FAUCET_KV
+# then paste the returned id here. (The faucet still runs without KV, but
+# with no rate-limiting — strongly recommended to set this.)
+[[kv_namespaces]]
+binding = "FAUCET_KV"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
