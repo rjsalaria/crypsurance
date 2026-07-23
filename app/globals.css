@@ -37,13 +37,19 @@ h4,
 /* ---------- glass + glow ---------- */
 
 .glass-card {
+  /* Slightly higher base opacity so the card still reads as frosted with a
+     lighter blur. Blur is the single most expensive thing to recompute while
+     scrolling (nav + every card sit over the animated blobs), so 14px -> 9px
+     is a big scroll-perf win for a barely perceptible visual change. */
   background: linear-gradient(
     145deg,
-    rgba(139, 92, 246, 0.09),
-    rgba(34, 211, 238, 0.05) 55%,
-    rgba(232, 121, 249, 0.06)
+    rgba(139, 92, 246, 0.12),
+    rgba(34, 211, 238, 0.07) 55%,
+    rgba(232, 121, 249, 0.08)
   );
-  backdrop-filter: blur(14px);
+  /* Let Tailwind/Lightning CSS emit the vendor prefixes — writing
+     -webkit-backdrop-filter by hand makes it drop the standard property. */
+  backdrop-filter: blur(9px);
   border: 1px solid rgba(168, 159, 208, 0.18);
   border-radius: 1.25rem;
 }
@@ -328,4 +334,59 @@ details.faq summary .chevron {
 
 details.faq[open] summary .chevron {
   transform: rotate(45deg);
+}
+
+/* ---------- scroll smoothness ---------- */
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+/* Keep the fixed ambient blobs from invalidating unrelated paints while the
+   page scrolls over them. */
+.blob-layer {
+  contain: layout paint style;
+}
+
+/* ---------- scroll reveal (native, no JS) ----------
+   Sections fade up as they scroll into view using CSS scroll-driven
+   animations. Safe by construction: browsers without `animation-timeline`
+   support (Safari/Firefox today) and reduced-motion visitors get no
+   animation and simply see the content — it is never hidden without the
+   animation present to reveal it. */
+
+@keyframes reveal-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(26px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    [data-reveal] {
+      animation: reveal-fade-up linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 45%;
+    }
+  }
+}
+
+/* ---------- respect reduced-motion everywhere ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }

@@ -214,7 +214,7 @@ export default function Home() {
 
       {/* ================= PRODUCTS ================= */}
       <section className="px-4 sm:px-6 py-24" id="products">
-        <div className="mx-auto max-w-6xl">
+        <div className="mx-auto max-w-6xl" data-reveal>
           <SectionHeading
             eyebrow="Coverage"
             title={
@@ -253,7 +253,7 @@ export default function Home() {
 
       {/* ================= HOW IT WORKS ================= */}
       <section className="px-4 sm:px-6 py-24" id="how">
-        <div className="mx-auto max-w-6xl">
+        <div className="mx-auto max-w-6xl" data-reveal>
           <SectionHeading
             eyebrow="Protocol"
             title={
@@ -283,7 +283,7 @@ export default function Home() {
 
       {/* ================= SURETY TOKEN ================= */}
       <section className="px-4 sm:px-6 py-24 scroll-mt-24" id="token">
-        <div className="mx-auto max-w-6xl">
+        <div className="mx-auto max-w-6xl" data-reveal>
           <SectionHeading
             eyebrow="SURETY Token"
             title={
@@ -334,7 +334,7 @@ export default function Home() {
 
       {/* ================= ROADMAP ================= */}
       <section className="px-4 sm:px-6 py-24 scroll-mt-24" id="roadmap">
-        <div className="mx-auto max-w-6xl">
+        <div className="mx-auto max-w-6xl" data-reveal>
           <SectionHeading
             eyebrow="Roadmap"
             title={
@@ -367,7 +367,7 @@ export default function Home() {
 
       {/* ================= FAQ ================= */}
       <section className="px-4 sm:px-6 py-24 scroll-mt-24" id="faq">
-        <div className="mx-auto max-w-3xl">
+        <div className="mx-auto max-w-3xl" data-reveal>
           <SectionHeading
             eyebrow="FAQ"
             title={
@@ -392,7 +392,7 @@ export default function Home() {
 
       {/* ================= CTA BAND ================= */}
       <section className="px-4 sm:px-6 pb-8">
-        <div className="mx-auto max-w-6xl glass-card ring-glow text-center px-6 py-16">
+        <div className="mx-auto max-w-6xl glass-card ring-glow text-center px-6 py-16" data-reveal>
           <h2 className="font-display text-3xl sm:text-4xl md:text-5xl font-bold leading-tight">
             Don&apos;t be part of the{" "}
             <span className="text-gradient">89%.</span>
