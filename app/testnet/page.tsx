@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import Blobs from "@/components/Blobs";
 import LiveDevnet from "@/components/LiveDevnet";
+import Faucet from "@/components/Faucet";
 
 export const metadata: Metadata = {
   title: "Testnet — The Real Protocol",
@@ -80,6 +81,13 @@ export default function TestnetPage() {
       <section className="px-4 sm:px-6 pb-10">
         <div className="mx-auto max-w-6xl">
           <LiveDevnet />
+        </div>
+      </section>
+
+      {/* SURETY faucet */}
+      <section className="px-4 sm:px-6 pb-10">
+        <div className="mx-auto max-w-6xl">
+          <Faucet />
         </div>
       </section>
 
