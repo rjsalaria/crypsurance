@@ -1,0 +1,57 @@
+name: Deploy to Hostinger
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build
+        run: npm run build
+
+      # FTP deployment is impossible on this hosting: the website is served
+      # from isolated per-site storage that the FTP account cannot see
+      # (proven by 20+ diagnostic runs - a File-Manager-created tracer file
+      # was unreachable from every FTP path). Instead, publish the built site
+      # to the hostinger-deploy branch; hPanel's GIT feature (running inside
+      # the website's own container) pulls that branch into the docroot.
+      - name: Publish build to hostinger-deploy branch
+        shell: bash
+        run: |
+          cd out
+          git init -q -b hostinger-deploy
+          git add -A
+          git -c user.email="actions@github.com" -c user.name="deploy-bot"             commit -qm "deploy ${GITHUB_SHA:0:7}"
+          git push -f "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" hostinger-deploy
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Give Hostinger's auto-deployment webhook time to pull, then check the
+      # live site. Until hPanel GIT is configured this stays red - honestly.
+      - name: Verify live site serves this build
+        shell: bash
+        run: |
+          sleep 60
+          if curl -s "https://crypsurance.io/?cb=$(date +%s)" | grep -q 'deploy-check'; then
+            echo "::notice::LIVE VERIFIED - crypsurance.io is serving this build"
+          else
+            echo "::error::Live site does not serve this build yet. If hPanel GIT auto-deployment is configured, check its deploy log; otherwise press Deploy in hPanel -> Advanced -> GIT."
+            exit 1
+          fi
