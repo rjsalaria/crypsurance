@@ -172,10 +172,14 @@ export default function TestnetPage() {
             <li className="flex gap-4">
               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-cyan-neon text-void font-display font-bold">3</span>
               <div>
-                <p className="font-semibold">Connect above</p>
+                <p className="font-semibold">Get SURETY &amp; connect</p>
                 <p className="mt-1 text-muted">
-                  Your balances appear live from the chain. As milestones ship,
-                  this is where you&apos;ll buy cover and stake — before anyone else.
+                  Grab free test{" "}
+                  <a href="#faucet" className="text-cyan-neon hover:underline">
+                    SURETY from the faucet
+                  </a>{" "}
+                  above, then connect to buy cover and stake — before anyone
+                  else.
                 </p>
               </div>
             </li>
