@@ -1,1 +1,0 @@
-This folder contains the built output assets for the worker "crypsurance-faucet" generated at 2026-07-26T12:18:51.678Z.
