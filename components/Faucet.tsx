@@ -7,7 +7,7 @@ import { useState } from "react";
  * Until it's set, the card shows a "coming online" note instead of a broken
  * request — so the page is never broken if this ships before the Worker.
  */
-const FAUCET_ENDPOINT = "https://REPLACE-WITH-YOUR-WORKER.workers.dev";
+const FAUCET_ENDPOINT = "https://crypsurance-faucet.surety-faucet.workers.dev";
 const FAUCET_CONFIGURED = !FAUCET_ENDPOINT.includes("REPLACE");
 
 // Loose base58 sanity check (real validation happens in the Worker).

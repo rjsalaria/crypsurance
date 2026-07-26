@@ -29,4 +29,4 @@ IP_DAILY_LIMIT = "4"     # max requests per network per cooldown window
 # with no rate-limiting — strongly recommended to set this.)
 [[kv_namespaces]]
 binding = "FAUCET_KV"
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
+id = "e3a76037b6364bc98aa0752680c538a6"
