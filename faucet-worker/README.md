@@ -1,64 +1,121 @@
-# SURETY Devnet Faucet (Cloudflare Worker)
+# SURETY Devnet Faucet — runbook
 
-A tiny serverless endpoint that sends **SURETY devnet tokens** to anyone who
-enters their wallet address on the testnet page. The pool wallet's private key
-lives **only here** (as a Cloudflare secret) — never in the website.
+A serverless endpoint that sends **SURETY devnet tokens** to anyone who enters
+their wallet on the testnet page. crypsurance.io is a static site and can't hold
+a signing key, so this **Cloudflare Worker** holds the pool key as a secret,
+rate-limits requests, and does the on-chain transfer.
 
-## Why a Worker?
-crypsurance.io is a static site, so it can't hold the signing key. This Worker
-holds it securely, rate-limits requests, and does the actual on-chain transfer.
+## What's deployed
+| | |
+|---|---|
+| Worker name | `crypsurance-faucet` |
+| Live URL | `https://crypsurance-faucet.surety.workers.dev` |
+| Frontend | `components/Faucet.tsx` → `FAUCET_ENDPOINT` (testnet page `/testnet`) |
+| Sender (pool) wallet | `9txXv5nFKu4E9AmykbcLGSRiyxM19C81HJqFmJbsBkxy` |
+| SURETY mint | `8wAqKooKyqubCG9nNx2bfcq9TQ9jEJxojyhAMAdfsHn9` |
+| Rate-limit store | KV `FAUCET_KV` (`e3a76037b6364bc98aa0752680c538a6`) |
+| Amount / cooldown | `2500` SURETY · `8h` per wallet · `4` per network (`[vars]` in `wrangler.toml`) |
 
-## One-time setup
+Secrets live **only on the Worker** (never in this repo): `DEVNET_KEYPAIR`, `RPC_URL`.
 
-From this `faucet-worker/` folder:
+---
+
+## First-time deploy (recorded for the future)
+
+Run everything from this `faucet-worker/` folder:
 
 ```bash
+# 0. install deps (once)
 npm install
-npx wrangler login                      # opens Cloudflare in your browser (free account)
 
-# 1. Create the rate-limit store, then paste the printed id into wrangler.toml
+# 1. log in (opens Cloudflare in the browser; free account)
+npx wrangler login
+
+# 2. create the rate-limit store, then paste the printed id into
+#    wrangler.toml -> [[kv_namespaces]].id
 npx wrangler kv namespace create FAUCET_KV
 
-# 2. Add the two secrets
-npx wrangler secret put DEVNET_KEYPAIR  # paste the byte array from solana/devnet-test.json
-npx wrangler secret put RPC_URL         # your Helius devnet RPC URL
+# 3. add the two secrets
+npx wrangler secret put DEVNET_KEYPAIR   # answer "Y" to create the worker on the
+                                         # first secret; paste the byte array from
+                                         # solana/devnet-test.json (one line)
+npx wrangler secret put RPC_URL          # paste the Helius devnet URL (solana/.env)
 
-# 3. Deploy
+# 4. deploy, then copy the printed https://crypsurance-faucet.<subdomain>.workers.dev
 npx wrangler deploy
 ```
 
-`wrangler deploy` prints a URL like:
+Then set that URL as `FAUCET_ENDPOINT` in `components/Faucet.tsx`, commit and
+push — the site auto-deploys and the faucet goes live.
 
-```
-https://crypsurance-faucet.<your-subdomain>.workers.dev
-```
+> ⚠️ **Gotcha we hit:** a stray character pasted into the `RPC_URL` secret made
+> the Worker throw a blank Cloudflare **1101**. The Worker now scrubs secrets and
+> returns real JSON errors, but paste secret values cleanly (no surrounding
+> quotes/spaces).
 
-Put that URL into **`components/Faucet.tsx`** (the `FAUCET_ENDPOINT` constant),
-commit, and push — the site auto-deploys and the faucet goes live.
-
-## Requirements
-- The **pool wallet** (`9txX…Bkxy`, the DEVNET_KEYPAIR) must hold SURETY and a
-  little devnet **SOL** — it pays the ~0.002 SOL account-rent + fees for each
-  new recipient. Top it up at faucet.quicknode.com/solana/devnet if it runs low.
-
-## Settings (`wrangler.toml` → `[vars]`)
-| Var | Default | Meaning |
-|-----|---------|---------|
-| `FAUCET_AMOUNT` | `2500` | SURETY sent per request |
-| `COOLDOWN_HOURS` | `8` | per-wallet cooldown |
-| `IP_DAILY_LIMIT` | `4` | max requests per network per window |
-
-Change a var and re-run `npx wrangler deploy`.
-
-## Test it
+## Change settings or code (redeploy)
 ```bash
-curl -X POST https://crypsurance-faucet.<you>.workers.dev \
+# amount / cooldown -> edit [vars] in wrangler.toml, then:
+npx wrangler deploy
+# logic -> edit src/index.js, then:
+npx wrangler deploy
+# rotate a secret:
+npx wrangler secret put DEVNET_KEYPAIR      # or RPC_URL
+```
+
+**If the Worker URL changes** (renamed worker, or new account subdomain):
+update `FAUCET_ENDPOINT` in `components/Faucet.tsx` (and `name = "…"` in
+`wrangler.toml` only if the *worker name* changed), then commit + push.
+
+---
+
+## Keeping it running — check balance & refill
+
+The pool wallet **sends SURETY** and **pays ~0.002 SOL rent** for each brand-new
+recipient. SURETY is effectively unlimited (~1B supply); **SOL is the one that
+runs out** — watch it.
+
+**Check status** (from the `solana/` folder):
+```bash
+node faucet-status.js
+```
+```
+Pool wallet:  9txXv5nFKu4E9AmykbcLGSRiyxM19C81HJqFmJbsBkxy
+  SOL:    0.4067  (~199 new-wallet drips before more SOL is needed)
+  SURETY: 998,987,980  (~399,595 drips of 2,500)
+  ✓ Healthy.
+```
+
+Prefer the Solana CLI? Equivalent one-liners:
+```bash
+solana balance 9txXv5nFKu4E9AmykbcLGSRiyxM19C81HJqFmJbsBkxy --url devnet
+spl-token balance 8wAqKooKyqubCG9nNx2bfcq9TQ9jEJxojyhAMAdfsHn9 \
+  --owner 9txXv5nFKu4E9AmykbcLGSRiyxM19C81HJqFmJbsBkxy --url devnet
+```
+
+**Refill SOL** (do this when `faucet-status` warns, i.e. below ~0.05 SOL):
+- Easiest: paste the pool address `9txXv5nFKu4E9AmykbcLGSRiyxM19C81HJqFmJbsBkxy`
+  into <https://faucet.quicknode.com/solana/devnet>.
+- Or with the Solana CLI (rate-limited):
+  ```bash
+  solana airdrop 2 9txXv5nFKu4E9AmykbcLGSRiyxM19C81HJqFmJbsBkxy --url devnet
+  ```
+
+**Refill SURETY** — rarely needed (the pool holds the whole supply). If it ever
+runs low, send more from any wallet that holds SURETY with
+`solana/send-surety.js`.
+
+---
+
+## Test the live faucet
+```bash
+curl -X POST https://crypsurance-faucet.surety.workers.dev \
   -H "Content-Type: application/json" \
   -d '{"address":"<your devnet wallet>"}'
 # -> {"signature":"...","amount":2500,"confirmed":true}
 ```
 
-## Security notes
-- Devnet only — play money. Never put a mainnet key here.
-- The key is a Cloudflare **secret**, not in the repo. `.gitignore` keeps
-  `node_modules`, `.dev.vars`, and `.wrangler` out of git.
+## Security
+Devnet only — play money; never put a mainnet key here. The signing key is a
+Cloudflare **secret**, not in the repo. `.gitignore` keeps `node_modules/`,
+`dist/`, `.wrangler/`, and `.dev.vars` out of git.
