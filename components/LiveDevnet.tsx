@@ -393,9 +393,23 @@ function MyPolicies({
     setError("");
     try {
       const poolAta = await getAssociatedTokenAddress(SURETY_MINT, POOL_WALLET);
-      const sigs = await connection.getSignaturesForAddress(poolAta, {
-        limit: 40,
-      });
+      // The pool account sees every faucet drip and everyone else's activity
+      // too, so a small fixed window would hide this wallet's older policies.
+      // Page back through more history before filtering to the holder.
+      const sigs: Awaited<
+        ReturnType<typeof connection.getSignaturesForAddress>
+      > = [];
+      let before: string | undefined;
+      while (sigs.length < 300) {
+        const batch = await connection.getSignaturesForAddress(poolAta, {
+          limit: 100,
+          before,
+        });
+        if (batch.length === 0) break;
+        sigs.push(...batch);
+        before = batch[batch.length - 1].signature;
+        if (batch.length < 100) break; // end of history
+      }
       const txs: Awaited<ReturnType<typeof connection.getParsedTransactions>> = [];
       for (let i = 0; i < sigs.length; i += 20) {
         const chunk = await connection.getParsedTransactions(
