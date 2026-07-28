@@ -70,6 +70,62 @@ function argValue(name) {
 const RESOLVE_ID = argValue("--resolve");
 const RESOLVE_DELAYED = argValue("--delayed"); // yes | no
 const RESOLVE_BASIS = argValue("--basis") || "offline-verification";
+// How far back to read the pool account. Raise it if the oracle ever warns
+// that a claim's policy fell outside the scanned window.
+const MAX_SIGS = Number(argValue("--max-sigs") ?? process.env.MAX_SIGS ?? 1000);
+
+/**
+ * Every faucet drip, premium payment, claim request and settlement lands on the
+ * pool token account, so a single fixed `limit` silently loses older policies
+ * once traffic picks up — and a claim whose policy has scrolled out of the
+ * window can never be matched, so it would never settle. Page back through
+ * history instead, up to a bounded cap.
+ */
+async function fetchSignatures(conn, address, max) {
+  const out = [];
+  let before;
+  while (out.length < max) {
+    const batch = await conn.getSignaturesForAddress(address, {
+      limit: Math.min(1000, max - out.length),
+      before,
+    });
+    if (batch.length === 0) break;
+    out.push(...batch);
+    before = batch[batch.length - 1].signature;
+    if (batch.length < 1000) break; // reached the end of the account's history
+  }
+  return out;
+}
+
+/**
+ * Fetch parsed transactions with light concurrency. Helius' free tier rejects
+ * batched RPC (getParsedTransactions), so these stay separate calls — a few in
+ * flight at a time keeps a large scan from taking minutes.
+ */
+async function fetchParsed(conn, sigs) {
+  const CONCURRENCY = 4;
+  const out = new Array(sigs.length).fill(null);
+  let next = 0;
+  async function worker() {
+    for (;;) {
+      const i = next++;
+      if (i >= sigs.length) return;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          out[i] = await conn.getParsedTransaction(sigs[i].signature, {
+            maxSupportedTransactionVersion: 0,
+          });
+          break;
+        } catch {
+          if (attempt === 0) await new Promise((r) => setTimeout(r, 400));
+          else console.warn(`  ! could not fetch ${sigs[i].signature.slice(0, 8)}…`);
+        }
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+  return out;
+}
 
 function loadSecretKey() {
   if (process.env.KEYPAIR_PATH) {
@@ -114,16 +170,9 @@ async function main() {
   const poolAta = await getAssociatedTokenAddress(SURETY_MINT, POOL_WALLET);
 
   console.log(`Mode: ${PAY ? "PAY (writes to chain)" : "dry run (add --pay to execute)"}`);
-  const sigs = await conn.getSignaturesForAddress(poolAta, { limit: 100 });
-  const txs = [];
-  for (const s of sigs) {
-    txs.push(
-      await conn.getParsedTransaction(s.signature, {
-        maxSupportedTransactionVersion: 0,
-      })
-    );
-    await new Promise((r) => setTimeout(r, 120));
-  }
+  const sigs = await fetchSignatures(conn, poolAta, MAX_SIGS);
+  console.log(`scanning ${sigs.length} pool transactions…`);
+  const txs = await fetchParsed(conn, sigs);
 
   const policies = new Map();
   const requests = new Map();
@@ -185,6 +234,17 @@ async function main() {
   }
 
   const pending = [...requests.keys()].filter((id) => !settled.has(id) && policies.has(id));
+
+  // A claim whose policy is outside the scanned window can never be matched —
+  // make that loud instead of silently skipping the payout.
+  const orphans = [...requests.keys()].filter(
+    (id) => !settled.has(id) && !policies.has(id)
+  );
+  if (orphans.length) {
+    console.warn(
+      `⚠ ${orphans.length} claim request(s) have no policy within the last ${sigs.length} transactions — re-run with --max-sigs ${MAX_SIGS * 2}: ${orphans.join(", ")}`
+    );
+  }
   console.log(`policies: ${policies.size} | claim requests: ${requests.size} | pending: ${pending.length} | awaiting offline verification: ${[...escalated].filter((id) => !settled.has(id)).length}\n`);
 
   for (const id of pending) {
