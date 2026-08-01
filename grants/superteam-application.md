@@ -253,3 +253,80 @@ the full loop in two minutes and verify it on Solana Explorer.
 **Use of funds:** Anchor programs (5,000) · independent security review (2,500) ·
 infrastructure and event-data feeds (1,200) · community testnet bug bounty
 (1,000) · open-source docs (300).
+
+---
+
+## Loom video pitch — script & shot list
+
+**Format:** screen recording + small camera bubble · **target 2:30, hard cap 3:00.**
+Reviewers watch a lot of these; the ones that win *show working software*.
+Most applicants present slides — your entire edge is that the product runs, so
+the demo is the pitch. Don't build a deck.
+
+### Before you hit record
+
+1. **Pre-stage a settled policy.** The oracle runs on a 30-min cron — you cannot
+   wait on camera. Beforehand: buy cover on `TEST-DELAY`, request the claim,
+   then settle it instantly yourself:
+   ```bash
+   cd solana && node process-claims.js --pay
+   ```
+   Now your policy table shows a **Paid ✓** row with a real payout tx to point at.
+2. Top up the pool wallet's devnet SOL (`node solana/faucet-status.js`) so the
+   faucet can't fail mid-demo.
+3. Open these tabs in order: `crypsurance.io/testnet` · the GitHub repo ·
+   the Actions tab (oracle run history) · a Solana Explorer payout tx.
+4. Close anything with private keys, `.env` files, or wallet seed phrases on
+   screen. Check your notification popups are silenced.
+
+### Script
+
+**0:00–0:20 · Camera on you. Hook.**
+> "Hi, I'm Rajendra, building CrypSurance from India. Insurance fails people in
+> two mechanical ways: a company decides whether you get paid, and it takes
+> months. We're building the settlement layer that removes both — and rather
+> than pitch it, I'll just run it for you on devnet right now."
+
+**0:20–1:20 · Screen share. The live loop — this is the whole pitch.**
+> "This is our testnet page. I paste a wallet address into the faucet — no
+> signup, no wallet connection — and test tokens arrive."
+> *(show faucet result)*
+> "Now I buy cover on a delayed flight. My premium moves as a real SPL transfer
+> and the policy terms are written into the transaction itself."
+> *(approve in Phantom, show the certificate)*
+> "I file a claim. And here" — *(point at the pre-settled Paid ✓ row)* — "is one
+> the oracle already settled. No human touched it. Here's the payout on Solana
+> Explorer."
+> *(open the explorer tab)*
+> "That oracle runs every 30 minutes on its own — this is its public run
+> history." *(GitHub Actions tab)*
+
+**1:20–1:50 · The honest gap → the ask.**
+> "Now the part I want to be upfront about. Today a policy is a structured
+> transaction memo, and the pool is a wallet I control. It's transparent and it
+> works — but it is not yet trustless, and I'd rather tell you that than have you
+> find it. Closing exactly that gap is what I'm asking you to fund."
+
+**1:50–2:20 · Milestones + budget.**
+> "Ten thousand USDC, three milestones. First: Anchor programs on devnet —
+> policies become PDA accounts and premiums move into a program-owned vault no
+> human key can drain. Second: migrate the app to those programs, mint real NFT
+> certificates, and publish an independent security review in full, including
+> whatever it finds. Third: replace the single oracle with multi-operator
+> consensus, and document it so any Solana team needing real-world verification
+> can reuse it. It's all MIT-licensed — the verification layer is the public
+> good here."
+
+**2:20–2:35 · Camera. Close.**
+> "Small-ticket cover only works where fees are sub-cent and finality is
+> instant — that's why this is on Solana and nowhere else. Everything I showed
+> is live at crypsurance.io/testnet, and the code's on GitHub. Thanks for
+> watching."
+
+### After recording — do not skip
+
+- Set the Loom to **"Anyone with the link can view."** Loom often defaults to
+  workspace-only; a reviewer hitting a permission wall is an instant rejection.
+  **Test the link in a private/incognito window before you paste it.**
+- Re-watch once with sound. If you fumble the first 20 seconds, re-record just
+  that — the hook is the only part everyone watches to the end.
