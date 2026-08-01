@@ -1,8 +1,21 @@
 # Grant application — CrypSurance
 
-**Target:** [Solana Foundation & CoinDCX India Grants](https://superteam.fun/earn/grants/Solana-fdn-coindcx-instagrant)
-(India-only · up to 15,000 USDC · ~30-day response · equity-free)
+**Target:** [Solana Foundation India Grants](https://superteam.fun/earn/grants/solana-foundation-india-grants/)
+— **OPEN** (verified 2026-08-01) · India-only · up to **10,000 USDC** · avg grant
+$4,667 · 117 recipients / $546k paid · ~30-day response · equity-free ·
+run by Superteam India (contact: [@paarugsethi](https://x.com/paarugsethi))
+
 **Ask:** 10,000 USDC · **Status:** draft, ready to submit
+
+> ⚠️ The *CoinDCX* India grant (up to 15k) is **CLOSED** — its Apply button is
+> disabled. Search results and cached listings still show it as live; don't
+> waste time there.
+>
+> **Fallback / parallel option:** the Solana Foundation's own grant program is
+> rolling, always open, and has **no regional restriction** —
+> application form: <https://share.hsforms.com/1GE1hYdApQGaDiCgaiWMXHA5lohw>
+> (~1 week initial review, ~3 weeks to decision). Same material works; it is
+> written to their public-goods criteria.
 
 > Positioning note: the Solana Foundation funds **public goods** with **open
 > source** contributions, a **Solana-specific** rationale, and **measurable
@@ -183,6 +196,29 @@ a reviewer this position clearly than have them find it themselves.
 - X: <https://x.com/crypsurance> · Telegram: <https://t.me/suretytoken_official>
 
 ---
+
+## How to submit
+
+1. Go to <https://superteam.fun/earn/grants/solana-foundation-india-grants/>
+2. **Apply Now** → sign in to Superteam Earn (Google/wallet). The form is behind
+   the login, so the exact field names may differ slightly from the labels below
+   — the answers in the next section cover everything these forms ask.
+3. Have ready before you start:
+   - **Solana wallet address for disbursement** — use a *mainnet* address you
+     control (⚠️ **not** the devnet pool wallet `9txX…Bkxy`, and never paste a
+     private key anywhere).
+   - **KYC details** — grants are paid to a real person; Indian PAN/ID is
+     typically requested at payout, not at application.
+   - Links from section 11.
+4. Optional but worth it: a short intro DM to
+   [@paarugsethi](https://x.com/paarugsethi) (the listing contact) with the
+   testnet link — regional grant leads respond well to a working product.
+
+**On the ask size:** the cap is 10k and the average is $4,667. 10k is defensible
+here because the milestones are concrete and there is a shipped product behind
+them — but it is the ceiling, so expect more scrutiny. If you would rather
+optimise for a fast yes, drop Milestone 2's independent review to a lighter
+peer review and ask **7,000**.
 
 ## Paste-ready short answers
 
