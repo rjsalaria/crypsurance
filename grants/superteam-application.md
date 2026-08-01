@@ -253,3 +253,6 @@ the full loop in two minutes and verify it on Solana Explorer.
 **Use of funds:** Anchor programs (5,000) · independent security review (2,500) ·
 infrastructure and event-data feeds (1,200) · community testnet bug bounty
 (1,000) · open-source docs (300).
+
+---
+
