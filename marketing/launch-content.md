@@ -164,3 +164,39 @@ Find YOUR claim on the public console at network.crypsurance.io.
 **Reward line (compliant):** Top Pioneers receive devnet SURETY airdrops and
 permanent Pioneer recognition. No purchase necessary; devnet tokens have no
 monetary value; this is not an offer of tokens, insurance, or investment.
+
+---
+
+## 4 · M2 kickoff post (Anchor programs) — added 2026-08-01
+
+Honest build-in-public announcement. The credibility move is naming the current
+limitation *before* anyone else does: memos + an operator-held pool are not
+trustless, and M2 is exactly what fixes it. Post 7–10pm IST.
+
+**Main post**
+
+> 🔨 Next build starts now: the Anchor programs.
+>
+> Right now a CrypSurance policy is an on-chain memo and the pool is a wallet we
+> control. It works, every step is public — but it isn't trustless yet. We'd
+> rather say that than let you find it.
+>
+> M2 changes it:
+> ◦ policies become PDA accounts
+> ◦ premiums move into a program-owned vault no human key can drain
+> ◦ certificates become real NFTs
+>
+> Built in public, MIT, devnet first 👇
+> github.com/rjsalaria/crypsurance
+
+**Follow-up reply (thread it)**
+
+> While we build it, the current version stays live — grab test SURETY from the
+> faucet and run a full claim yourself: crypsurance.io/testnet
+>
+> The oracle still settles every 30 minutes, on its own.
+
+**Alternate hook** (if you want the sharper, more technical opener)
+
+> Most "insurance protocols" never show you the part where a human could still
+> say no. Ours has one — a pool wallet we hold. We're deleting it. Here's how 👇
