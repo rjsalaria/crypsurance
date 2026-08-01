@@ -25,11 +25,19 @@ run by Superteam India (contact: [@paarugsethi](https://x.com/paarugsethi))
 
 ---
 
-## 1. One-liner
+## 1. One-liner  ·  **137 / 150 chars**
 
-Open-source parametric cover infrastructure on Solana — a claims oracle and
-verifier network that settles real-world claims on-chain, with no adjuster and
-no discretion.
+> Open-source parametric cover infrastructure on Solana — an autonomous oracle that verifies real-world events and settles claims on-chain.
+
+Leads with *open-source* (the Foundation's headline criterion), names the
+mechanism, states the outcome. Alternates, all under 150:
+
+| | chars | |
+|---|---|---|
+| B | 142 | Parametric cover on Solana: policies as on-chain accounts, claims verified by an open-source oracle, payouts executed by code — not adjusters. |
+| C | 140 | An open-source oracle and verifier network on Solana that settles real-world cover claims on-chain — no adjuster, no discretion, no waiting. |
+| D | 132 | Open-source infrastructure for parametric cover on Solana: real-world events verified by oracle, claims settled on-chain in minutes. |
+| E | 134 | Parametric cover infrastructure on Solana — open-source oracle verifies real-world events, program logic pays the claim. No adjusters. |
 
 ## 2. Project summary (short field)
 
@@ -224,9 +232,8 @@ peer review and ask **7,000**.
 
 **Project name:** CrypSurance
 
-**One-line description:**
-Open-source parametric cover infrastructure on Solana — an autonomous claims
-oracle and verifier network that settle real-world claims on-chain.
+**One-line description:** *(137 chars — fits a 150 limit)*
+Open-source parametric cover infrastructure on Solana — an autonomous oracle that verifies real-world events and settles claims on-chain.
 
 **Amount requested:** 10,000 USDC
 
