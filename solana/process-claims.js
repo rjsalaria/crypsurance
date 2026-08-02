@@ -202,14 +202,21 @@ async function main() {
       flight: p.flight,
       basis,
     });
+    const holderAta = await getAssociatedTokenAddress(SURETY_MINT, new PublicKey(p.holder));
     const tx = new Transaction();
     if (delayed) {
-      const holderAta = await getAssociatedTokenAddress(SURETY_MINT, new PublicKey(p.holder));
       tx.add(createTransferInstruction(poolAta, holderAta, pool.publicKey, BigInt(p.payout) * 10n ** DECIMALS));
       tx.add(new TransactionInstruction({ keys: [], programId: MEMO_PROGRAM, data: Buffer.from(memo, "utf8") }));
     } else {
+      // Reference BOTH the pool and the holder's token account: the pool keeps
+      // this visible in the public Verifier console, and the holder's account
+      // makes it visible in their own wallet history (a denial moves no
+      // tokens, so without this the user could never see the outcome).
       tx.add(new TransactionInstruction({
-        keys: [{ pubkey: poolAta, isSigner: false, isWritable: false }],
+        keys: [
+          { pubkey: poolAta, isSigner: false, isWritable: false },
+          { pubkey: holderAta, isSigner: false, isWritable: false },
+        ],
         programId: MEMO_PROGRAM,
         data: Buffer.from(memo, "utf8"),
       }));
@@ -272,9 +279,18 @@ async function main() {
         date: p.date,
         reason: verdict.reason,
       });
+      // Same as a denial: reference the holder's token account too, so the
+      // escalation shows up in their own wallet history, not just the pool's.
+      const holderAta = await getAssociatedTokenAddress(
+        SURETY_MINT,
+        new PublicKey(p.holder)
+      );
       const tx = new Transaction().add(
         new TransactionInstruction({
-          keys: [{ pubkey: poolAta, isSigner: false, isWritable: false }],
+          keys: [
+            { pubkey: poolAta, isSigner: false, isWritable: false },
+            { pubkey: holderAta, isSigner: false, isWritable: false },
+          ],
           programId: MEMO_PROGRAM,
           data: Buffer.from(memo, "utf8"),
         })

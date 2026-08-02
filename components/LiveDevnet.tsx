@@ -25,6 +25,7 @@ import {
 } from "@solana/spl-token";
 import "@solana/wallet-adapter-react-ui/styles.css";
 import PolicyCertificate from "./PolicyCertificate";
+import { fetchMemoHistory, mergeMemoRecords } from "./chainMemos";
 
 /** The real SURETY devnet mint created by solana/create-token.js. */
 const SURETY_MINT = new PublicKey(
@@ -392,32 +393,24 @@ function MyPolicies({
     setScanning(true);
     setError("");
     try {
+      // Read this wallet's OWN history rather than replaying the pool's.
+      // The pool account is a shared log that grows with every user and every
+      // faucet drip, and fetching transactions from the public devnet RPC
+      // rate-limits immediately. Memos come back on the signature list itself,
+      // so this is two RPC calls instead of dozens.
+      const userAta = await getAssociatedTokenAddress(SURETY_MINT, publicKey);
       const poolAta = await getAssociatedTokenAddress(SURETY_MINT, POOL_WALLET);
-      // The pool account sees every faucet drip and everyone else's activity
-      // too, so a small fixed window would hide this wallet's older policies.
-      // Page back through more history before filtering to the holder.
-      const sigs: Awaited<
-        ReturnType<typeof connection.getSignaturesForAddress>
-      > = [];
-      let before: string | undefined;
-      while (sigs.length < 300) {
-        const batch = await connection.getSignaturesForAddress(poolAta, {
-          limit: 100,
-          before,
-        });
-        if (batch.length === 0) break;
-        sigs.push(...batch);
-        before = batch[batch.length - 1].signature;
-        if (batch.length < 100) break; // end of history
-      }
-      const txs: Awaited<ReturnType<typeof connection.getParsedTransactions>> = [];
-      for (let i = 0; i < sigs.length; i += 20) {
-        const chunk = await connection.getParsedTransactions(
-          sigs.slice(i, i + 20).map((s) => s.signature),
-          { maxSupportedTransactionVersion: 0 }
-        );
-        txs.push(...chunk);
-      }
+      const [walletMemos, ataMemos, poolMemos] = await Promise.all([
+        fetchMemoHistory(connection, publicKey, 60), // policies + claim requests (holder signs)
+        fetchMemoHistory(connection, userAta, 60), // settlements (they touch the holder's token account)
+        // Recent pool activity, purely as a fallback for settlement status:
+        // denials and escalations move no tokens, so ones written before they
+        // started referencing the holder's account are only visible here.
+        // Policies are filtered to this holder below, so other users' rows
+        // can't leak in.
+        fetchMemoHistory(connection, poolAta, 100),
+      ]);
+      const records = mergeMemoRecords(walletMemos, ataMemos, poolMemos);
 
       const me = publicKey.toBase58();
       const policies = new Map<string, PolicyRow>();
@@ -426,35 +419,22 @@ function MyPolicies({
       const paid = new Map<string, string>();
       const denied = new Set<string>();
 
-      for (let i = txs.length - 1; i >= 0; i--) {
-        const tx = txs[i];
-        if (!tx) continue;
-        for (const ix of tx.transaction.message.instructions) {
-          if (!("program" in ix) || ix.program !== "spl-memo") continue;
-          try {
-            const m = JSON.parse(ix.parsed as string);
-            if (m.kind === "policy" && m.holder === me && m.flight) {
-              policies.set(m.id, {
-                id: m.id,
-                flight: m.flight,
-                date: m.date ?? "—",
-                payout: m.payout,
-                premium: m.premium,
-                status: "active",
-                buySig: sigs[i]?.signature,
-              });
-            } else if (m.kind === "claim-request") {
-              requested.add(m.policy);
-            } else if (m.kind === "verify-request") {
-              manual.add(m.policy);
-            } else if (m.kind === "claim-paid") {
-              paid.set(m.policy, sigs[i]?.signature ?? "");
-            } else if (m.kind === "claim-denied") {
-              denied.add(m.policy);
-            }
-          } catch {
-            /* non-JSON memo — ignore */
-          }
+      for (const { memo: m, signature } of records) {
+        if (m.kind === "policy" && m.holder === me && m.flight && m.id) {
+          policies.set(m.id, {
+            id: m.id,
+            flight: m.flight,
+            date: m.date ?? "—",
+            payout: m.payout ?? 0,
+            premium: m.premium ?? 0,
+            status: "active",
+            buySig: signature,
+          });
+        } else if (m.policy) {
+          if (m.kind === "claim-request") requested.add(m.policy);
+          else if (m.kind === "verify-request") manual.add(m.policy);
+          else if (m.kind === "claim-paid") paid.set(m.policy, signature);
+          else if (m.kind === "claim-denied") denied.add(m.policy);
         }
       }
 

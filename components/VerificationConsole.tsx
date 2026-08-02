@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { clusterApiUrl, Connection, PublicKey } from "@solana/web3.js";
 import { getAssociatedTokenAddress } from "@solana/spl-token";
+import { fetchMemoHistory } from "./chainMemos";
 
 const SURETY_MINT = new PublicKey(
   "8wAqKooKyqubCG9nNx2bfcq9TQ9jEJxojyhAMAdfsHn9"
@@ -47,43 +48,29 @@ export default function VerificationConsole() {
     setScanning(true);
     setError("");
     try {
+      // Memos ride along on the signature list, so the whole public feed is a
+      // single RPC call. Fetching the transactions instead gets rate-limited
+      // by the public devnet RPC almost immediately.
       const poolAta = await getAssociatedTokenAddress(SURETY_MINT, POOL_WALLET);
-      const sigs = await connection.getSignaturesForAddress(poolAta, { limit: 40 });
-      const txs: Awaited<ReturnType<typeof connection.getParsedTransactions>> = [];
-      for (let i = 0; i < sigs.length; i += 20) {
-        const chunk = await connection.getParsedTransactions(
-          sigs.slice(i, i + 20).map((s) => s.signature),
-          { maxSupportedTransactionVersion: 0 }
-        );
-        txs.push(...chunk);
-      }
+      const records = await fetchMemoHistory(connection, poolAta, 100);
+
       const rows: EventRow[] = [];
-      txs.forEach((tx, i) => {
-        if (!tx) return;
-        for (const ix of tx.transaction.message.instructions) {
-          if (!("program" in ix) || ix.program !== "spl-memo") continue;
-          try {
-            const m = JSON.parse(ix.parsed as string);
-            if (!m.kind) continue;
-            const kind = (m.kind === "policy" ? "policy" : m.kind) as EventRow["kind"];
-            if (!(kind in kindMeta)) continue;
-            rows.push({
-              kind,
-              policy: m.id ?? m.policy ?? "—",
-              flight: m.flight,
-              date: m.date,
-              payout: m.payout,
-              basis: m.basis,
-              reason: m.reason,
-              holder: m.holder,
-              signature: sigs[i]?.signature ?? "",
-              time: tx.blockTime ?? null,
-            });
-          } catch {
-            /* non-JSON memo */
-          }
-        }
-      });
+      for (const { memo: m, signature, blockTime } of records) {
+        if (!m.kind || !(m.kind in kindMeta)) continue;
+        rows.push({
+          kind: m.kind as EventRow["kind"],
+          policy: m.id ?? m.policy ?? "—",
+          flight: m.flight,
+          date: m.date,
+          payout: m.payout,
+          basis: m.basis,
+          reason: m.reason,
+          holder: m.holder,
+          signature,
+          time: blockTime,
+        });
+      }
+      rows.reverse(); // newest first
       setEvents(rows);
     } catch {
       setError("Devnet RPC is busy — try Refresh in a few seconds.");
