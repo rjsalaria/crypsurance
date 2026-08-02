@@ -118,6 +118,38 @@ export async function fetchMemoHistory(
 }
 
 /**
+ * Bound how long we wait on a wallet prompt.
+ *
+ * If the popup is dismissed or never noticed, the adapter's promise can hang
+ * indefinitely and leave a button stuck on "Sending…" until the page is
+ * reloaded. Time it out instead — but word the failure carefully: the wallet
+ * may still complete afterwards, so this must not claim the action failed.
+ */
+export function withWalletTimeout<T>(p: Promise<T>, ms = 90_000): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(
+      () =>
+        reject(
+          new Error(
+            "No response from your wallet. If you did approve it, hit Refresh — the transaction may still have gone through."
+          )
+        ),
+      ms
+    );
+    p.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(timer);
+        reject(e);
+      }
+    );
+  });
+}
+
+/**
  * Confirm a transaction by polling its signature status.
  *
  * Do NOT use connection.confirmTransaction with a blockhash captured before
