@@ -215,21 +215,28 @@ async function handle(request, env, origin) {
  * key stays server-side. Method allowlist + CORS lock keep it from becoming a
  * free public RPC for anyone else.
  */
+// NOTE: these are JSON-RPC *wire* method names, which are not always the
+// web3.js client method names — e.g. connection.getParsedTokenAccountsByOwner()
+// sends "getTokenAccountsByOwner". Getting this wrong makes the dApp silently
+// fall back to the public RPC, which is exactly what the proxy exists to avoid.
 const RPC_METHODS = new Set([
   "getBalance",
   "getAccountInfo",
   "getMultipleAccounts",
-  "getParsedTokenAccountsByOwner",
+  "getTokenAccountsByOwner",
   "getTokenAccountBalance",
+  "getTokenSupply",
   "getSignaturesForAddress",
   "getSignatureStatuses",
   "getTransaction",
-  "getParsedTransaction",
   "getLatestBlockhash",
+  "isBlockhashValid",
+  "getRecentBlockhash",
   "getFeeForMessage",
   "getMinimumBalanceForRentExemption",
   "sendTransaction",
   "simulateTransaction",
+  "getGenesisHash",
   "getEpochInfo",
   "getSlot",
   "getHealth",

@@ -25,7 +25,12 @@ import {
 } from "@solana/spl-token";
 import "@solana/wallet-adapter-react-ui/styles.css";
 import PolicyCertificate from "./PolicyCertificate";
-import { fetchMemoHistory, mergeMemoRecords } from "./chainMemos";
+import {
+  DEVNET_RPC,
+  devnetFetch,
+  fetchMemoHistory,
+  mergeMemoRecords,
+} from "./chainMemos";
 
 /** The real SURETY devnet mint created by solana/create-token.js. */
 const SURETY_MINT = new PublicKey(
@@ -714,13 +719,18 @@ function LiveDevnetInner() {
 }
 
 export default function LiveDevnet() {
-  const endpoint = useMemo(() => clusterApiUrl("devnet"), []);
   const wallets = useMemo(
     () => [new PhantomWalletAdapter(), new SolflareWalletAdapter()],
     []
   );
+  // Routed through the project worker (see chainMemos) so visitors aren't at
+  // the mercy of the public devnet RPC's per-IP throttling.
+  const config = useMemo(
+    () => ({ commitment: "confirmed" as const, fetch: devnetFetch }),
+    []
+  );
   return (
-    <ConnectionProvider endpoint={endpoint}>
+    <ConnectionProvider endpoint={DEVNET_RPC} config={config}>
       <WalletProvider wallets={wallets} autoConnect={false}>
         <WalletModalProvider>
           <LiveDevnetInner />
