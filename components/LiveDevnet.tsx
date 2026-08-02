@@ -31,6 +31,7 @@ import {
   devnetFetch,
   fetchMemoHistory,
   mergeMemoRecords,
+  withWalletTimeout,
 } from "./chainMemos";
 
 /** The real SURETY devnet mint created by solana/create-token.js. */
@@ -177,7 +178,7 @@ function BuyCover({
         })
       );
 
-      const signature = await sendTransaction(tx, connection);
+      const signature = await withWalletTimeout(sendTransaction(tx, connection));
       // Poll for status instead of confirming against a pre-approval blockhash,
       // which expires while the user is in their wallet and falsely reports
       // failure for transactions that landed.
@@ -502,7 +503,9 @@ function MyPolicies({
             data: Buffer.from(memo, "utf8"),
           })
         );
-        const signature = await sendTransaction(tx, connection);
+        const signature = await withWalletTimeout(
+          sendTransaction(tx, connection)
+        );
         await confirmSignature(connection, signature);
         onChanged();
       } catch (e) {
