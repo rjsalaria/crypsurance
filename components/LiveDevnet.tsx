@@ -26,6 +26,7 @@ import {
 import "@solana/wallet-adapter-react-ui/styles.css";
 import PolicyCertificate from "./PolicyCertificate";
 import {
+  confirmSignature,
   DEVNET_RPC,
   devnetFetch,
   fetchMemoHistory,
@@ -176,12 +177,11 @@ function BuyCover({
         })
       );
 
-      const latest = await connection.getLatestBlockhash();
       const signature = await sendTransaction(tx, connection);
-      await connection.confirmTransaction(
-        { signature, ...latest },
-        "confirmed"
-      );
+      // Poll for status instead of confirming against a pre-approval blockhash,
+      // which expires while the user is in their wallet and falsely reports
+      // failure for transactions that landed.
+      await confirmSignature(connection, signature);
 
       setPurchase({
         policyId,
@@ -502,9 +502,8 @@ function MyPolicies({
             data: Buffer.from(memo, "utf8"),
           })
         );
-        const latest = await connection.getLatestBlockhash();
         const signature = await sendTransaction(tx, connection);
-        await connection.confirmTransaction({ signature, ...latest }, "confirmed");
+        await confirmSignature(connection, signature);
         onChanged();
       } catch (e) {
         setError(e instanceof Error ? e.message.slice(0, 120) : "Claim request failed");
