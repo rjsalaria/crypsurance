@@ -2,8 +2,14 @@
 
 import { useEffect, useState } from "react";
 
-// The oracle runs on a 30-minute schedule (GitHub Actions cron every 30 min).
+// The oracle is scheduled every 30 minutes. Note that GitHub Actions treats
+// cron as best-effort: runs are routinely delayed and low-activity repos get
+// scheduled runs skipped entirely, so the real gap between runs is often
+// longer. The countdown therefore shows the next *scheduled* slot, and the
+// telemetry shows when the oracle actually last ran.
 const WINDOW_MS = 30 * 60 * 1000;
+const RUNS_API =
+  "https://api.github.com/repos/rjsalaria/crypsurance/actions/workflows/oracle.yml/runs?per_page=1&status=success";
 
 function useOracleClock() {
   const [now, setNow] = useState(() => Date.now());
@@ -16,16 +22,58 @@ function useOracleClock() {
   const msRemaining = WINDOW_MS - intoWindow;
   const secondsRemaining = msRemaining / 1000;
   const fractionRemaining = msRemaining / WINDOW_MS;
-  // the scheduled run fires at each boundary — show a sync burst just after
+  // the scheduled slot opens at each boundary — show a sync burst just after
   const syncing = intoWindow < 6000;
 
-  return { secondsRemaining, fractionRemaining, syncing };
+  return { now, secondsRemaining, fractionRemaining, syncing };
+}
+
+/** When the oracle genuinely last completed, straight from the public run log. */
+function useLastRun(now: number) {
+  const [startedAt, setStartedAt] = useState<number | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await fetch(RUNS_API, {
+          headers: { Accept: "application/vnd.github+json" },
+        });
+        if (!res.ok) throw new Error(String(res.status));
+        const data = await res.json();
+        const run = data?.workflow_runs?.[0];
+        const t = run?.run_started_at ? Date.parse(run.run_started_at) : NaN;
+        if (!cancelled && Number.isFinite(t)) {
+          setStartedAt(t);
+          setFailed(false);
+        }
+      } catch {
+        if (!cancelled) setFailed(true); // rate-limited or offline — degrade quietly
+      }
+    };
+    load();
+    const t = setInterval(load, 120_000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, []);
+
+  if (startedAt === null) return { label: failed ? "—" : "checking…" };
+
+  const mins = Math.max(0, Math.round((now - startedAt) / 60000));
+  if (mins < 1) return { label: "just now" };
+  if (mins < 60) return { label: `${mins} min ago` };
+  const h = Math.floor(mins / 60);
+  return { label: `${h}h ${mins % 60}m ago` };
 }
 
 const pad = (n: number) => String(Math.floor(n)).padStart(2, "0");
 
 export default function OracleCountdown() {
-  const { secondsRemaining, fractionRemaining, syncing } = useOracleClock();
+  const { now, secondsRemaining, fractionRemaining, syncing } = useOracleClock();
+  const lastRun = useLastRun(now);
   const mm = pad(secondsRemaining / 60);
   const ss = pad(secondsRemaining % 60);
 
@@ -94,7 +142,7 @@ export default function OracleCountdown() {
                   {mm}:{ss}
                 </span>
                 <span className="mt-1 text-[10px] uppercase tracking-[0.3em] text-cyan-neon">
-                  next sync
+                  next slot
                 </span>
               </>
             )}
@@ -113,16 +161,18 @@ export default function OracleCountdown() {
             The oracle never sleeps.
           </h2>
           <p className="mt-2 text-sm text-muted max-w-lg leading-relaxed">
-            A scheduled agent wakes every 30 minutes, pulls the latest event
-            data, and settles every pending claim on-chain — pay, deny, or
-            escalate to human verification. No one has to press a button.
+            A scheduled agent wakes on its own, pulls the latest event data, and
+            settles every pending claim on-chain — pay, deny, or escalate to
+            human verification. No one has to press a button. It is scheduled
+            every 30 minutes, though the runner queues jobs on a best-effort
+            basis, so real gaps between runs can be longer.
           </p>
 
           <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-3 text-sm max-w-md">
             {[
-              { k: "Cycle interval", v: "30:00" },
+              { k: "Last actual run", v: lastRun.label },
+              { k: "Scheduled every", v: "30 min" },
               { k: "Network", v: "Solana devnet" },
-              { k: "Verification", v: "Multi-source" },
               { k: "On no data", v: "→ human network" },
             ].map((r) => (
               <div key={r.k} className="flex items-center justify-between border-b border-muted/10 pb-1.5">

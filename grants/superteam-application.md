@@ -85,9 +85,12 @@ Shipped and working on devnet:
 - **A complete claim lifecycle.** Buy cover with a real SPL token transfer →
   file a claim → an oracle verifies it against live flight data → the pool pays
   out on-chain. Every step is a real devnet transaction.
-- **An autonomous claims oracle.** Runs every 30 minutes via GitHub Actions, with
-  a public run history. It settles what it can verify from data, and when data is
-  inconclusive it escalates on-chain to human verification rather than guessing.
+- **An autonomous claims oracle.** Wakes on a schedule via GitHub Actions with a
+  fully public run history — nominally every 30 minutes, though shared CI
+  runners queue and skip jobs, so the observed cadence is closer to hourly.
+  (Moving it to a punctual scheduler is a known task.) It settles what it can
+  verify from data, and when data is inconclusive it escalates on-chain to human
+  verification rather than guessing.
 - **A public Verifier Network console.** Anyone can watch policies, claims,
   verifications and payouts stream off-chain-free, no wallet required.
 - **A self-serve faucet.** Paste a devnet address, get test tokens, try to break
