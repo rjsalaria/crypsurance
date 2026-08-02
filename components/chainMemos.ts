@@ -117,6 +117,49 @@ export async function fetchMemoHistory(
   return out;
 }
 
+/**
+ * Confirm a transaction by polling its signature status.
+ *
+ * Do NOT use connection.confirmTransaction with a blockhash captured before
+ * the wallet prompt: the user spends time approving, the blockhash expires,
+ * and it reports "block height exceeded" for transactions that actually
+ * landed — telling someone their purchase failed when it succeeded is the
+ * worst possible error, because they buy again.
+ *
+ * Returns "confirmed" once seen on-chain, or "pending" if it hasn't appeared
+ * within the timeout (it may still land — the caller has the signature).
+ * Throws only when the chain reports a genuine execution error.
+ */
+export async function confirmSignature(
+  connection: Connection,
+  signature: string,
+  timeoutMs = 60_000
+): Promise<"confirmed" | "pending"> {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    try {
+      const { value } = await connection.getSignatureStatuses([signature], {
+        searchTransactionHistory: true,
+      });
+      const st = value[0];
+      if (st?.err) {
+        throw new Error(`Transaction failed on-chain: ${JSON.stringify(st.err)}`);
+      }
+      if (
+        st?.confirmationStatus === "confirmed" ||
+        st?.confirmationStatus === "finalized"
+      ) {
+        return "confirmed";
+      }
+    } catch (e) {
+      if (e instanceof Error && e.message.startsWith("Transaction failed")) throw e;
+      /* transient RPC hiccup — keep polling */
+    }
+    await new Promise((r) => setTimeout(r, 1200));
+  }
+  return "pending";
+}
+
 /** Merge memo histories, drop duplicates, and order oldest → newest. */
 export function mergeMemoRecords(...lists: MemoRecord[][]): MemoRecord[] {
   const seen = new Set<string>();
