@@ -7,6 +7,14 @@ run by Superteam India (contact: [@paarugsethi](https://x.com/paarugsethi))
 
 **Ask:** 10,000 USDC · **Status:** ✅ **SUBMITTED** (2026-08-03)
 
+> Changed after submission: the oracle moved from GitHub Actions to Cloudflare
+> Cron Triggers. The submitted text described the cadence as "closer to hourly"
+> because GitHub delayed runs by ~16 min on average and skipped enough that gaps
+> reached 224 minutes. It now fires within seconds of every 30-minute boundary
+> (verified 2026-08-02: heartbeat at 19:30:06Z, 6s past the boundary). Worth
+> mentioning if the reviewer follows up — it is a strict improvement on what
+> was submitted, not a walk-back.
+
 **Video pitch (submitted):**
 "Running Parametric Flight Insurance on Solana DevNet" · 9:37 ·
 public access verified 2026-08-03 (oEmbed resolves, so an unauthenticated
@@ -90,12 +98,12 @@ Shipped and working on devnet:
 - **A complete claim lifecycle.** Buy cover with a real SPL token transfer →
   file a claim → an oracle verifies it against live flight data → the pool pays
   out on-chain. Every step is a real devnet transaction.
-- **An autonomous claims oracle.** Wakes on a schedule via GitHub Actions with a
-  fully public run history — nominally every 30 minutes, though shared CI
-  runners queue and skip jobs, so the observed cadence is closer to hourly.
-  (Moving it to a punctual scheduler is a known task.) It settles what it can
-  verify from data, and when data is inconclusive it escalates on-chain to human
-  verification rather than guessing.
+- **An autonomous claims oracle**, running every 30 minutes on Cloudflare Cron
+  Triggers, with a public heartbeat at
+  [`/oracle-status`](https://crypsurance-faucet.surety.workers.dev/oracle-status)
+  so the cadence can be verified rather than taken on trust. It settles what it
+  can verify from data, and when data is inconclusive it escalates on-chain to
+  human verification rather than guessing.
 - **A public Verifier Network console.** Anyone can watch policies, claims,
   verifications and payouts stream off-chain-free, no wallet required.
 - **A self-serve faucet.** Paste a devnet address, get test tokens, try to break

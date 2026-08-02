@@ -194,7 +194,9 @@ trustless, and M2 is exactly what fixes it. Post 7–10pm IST.
 > While we build it, the current version stays live — grab test SURETY from the
 > faucet and run a full claim yourself: crypsurance.io/testnet
 >
-> The oracle still wakes on its own and settles them — no one presses a button.
+> The oracle still wakes every 30 minutes and settles them — no one presses a
+> button. Check its heartbeat yourself:
+> crypsurance-faucet.surety.workers.dev/oracle-status
 
 **Alternate hook** (if you want the sharper, more technical opener)
 
