@@ -179,11 +179,10 @@ export default function OracleCountdown() {
             The oracle never sleeps.
           </h2>
           <p className="mt-2 text-sm text-muted max-w-lg leading-relaxed">
-            A scheduled agent wakes on its own, pulls the latest event data, and
-            settles every pending claim on-chain — pay, deny, or escalate to
-            human verification. No one has to press a button. It is scheduled
-            every 30 minutes, though the runner queues jobs on a best-effort
-            basis, so real gaps between runs can be longer.
+            A scheduled agent wakes every 30 minutes, pulls the latest event
+            data, and settles every pending claim on-chain — pay, deny, or
+            escalate to human verification. No one has to press a button, and
+            the timestamp below is the real last run, not a promise.
           </p>
 
           <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-3 text-sm max-w-md">
