@@ -5,7 +5,12 @@
 $4,667 · 117 recipients / $546k paid · ~30-day response · equity-free ·
 run by Superteam India (contact: [@paarugsethi](https://x.com/paarugsethi))
 
-**Ask:** 10,000 USDC · **Status:** draft, ready to submit
+**Ask:** 10,000 USDC · **Status:** ✅ **SUBMITTED** (2026-08-03)
+
+**Video pitch (submitted):**
+"Running Parametric Flight Insurance on Solana DevNet" · 9:37 ·
+public access verified 2026-08-03 (oEmbed resolves, so an unauthenticated
+reviewer can watch it).
 
 > ⚠️ The *CoinDCX* India grant (up to 15k) is **CLOSED** — its Apply button is
 > disabled. Search results and cached listings still show it as live; don't
