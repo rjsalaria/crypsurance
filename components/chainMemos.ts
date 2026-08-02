@@ -1,4 +1,36 @@
-import type { Connection, PublicKey } from "@solana/web3.js";
+import { Connection, clusterApiUrl } from "@solana/web3.js";
+import type { Commitment, PublicKey } from "@solana/web3.js";
+
+/**
+ * The dApp's RPC endpoint: the project worker, which holds a dedicated RPC key
+ * server-side. Solana's public devnet RPC throttles per IP hard enough that
+ * ordinary visitors hit failures just by using the page.
+ */
+export const DEVNET_RPC =
+  "https://crypsurance-faucet.surety.workers.dev/rpc";
+
+/**
+ * Connection that prefers the worker RPC but transparently falls back to the
+ * public devnet endpoint if it's unreachable or rejects a call — so an outage
+ * (or a method outside the worker's allowlist) degrades instead of breaking
+ * the whole page.
+ */
+export const devnetFetch = async (
+  input: RequestInfo | URL,
+  init?: RequestInit
+): Promise<Response> => {
+  try {
+    const res = await fetch(input, init);
+    if (res.ok) return res;
+  } catch {
+    /* worker unreachable — fall through */
+  }
+  return fetch(clusterApiUrl("devnet"), init);
+};
+
+export function makeDevnetConnection(commitment: Commitment = "confirmed") {
+  return new Connection(DEVNET_RPC, { commitment, fetch: devnetFetch });
+}
 
 /** The JSON memos the protocol writes on-chain (policy, claim, settlement). */
 export type ChainMemo = {

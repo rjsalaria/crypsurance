@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { clusterApiUrl, Connection, PublicKey } from "@solana/web3.js";
+import { PublicKey } from "@solana/web3.js";
 import { getAssociatedTokenAddress } from "@solana/spl-token";
-import { fetchMemoHistory } from "./chainMemos";
+import { fetchMemoHistory, makeDevnetConnection } from "./chainMemos";
 
 const SURETY_MINT = new PublicKey(
   "8wAqKooKyqubCG9nNx2bfcq9TQ9jEJxojyhAMAdfsHn9"
@@ -36,10 +36,7 @@ const kindMeta: Record<EventRow["kind"], { label: string; cls: string }> = {
 };
 
 export default function VerificationConsole() {
-  const connection = useMemo(
-    () => new Connection(clusterApiUrl("devnet"), "confirmed"),
-    []
-  );
+  const connection = useMemo(() => makeDevnetConnection(), []);
   const [events, setEvents] = useState<EventRow[] | null>(null);
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState("");
