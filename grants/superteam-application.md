@@ -170,6 +170,37 @@ other Solana teams can reuse the verification layer.
 liquidity, marketing of a raise, or any distribution to holders. It funds
 open-source protocol engineering and its review, only.
 
+## 7b. Primary Key Performance Indicator
+
+> Form field: *"What metric will you track to indicate success/failure of the
+> project? At what point will it be a success?"*
+
+**Primary KPI — distinct non-team wallets that complete a full claim lifecycle
+on devnet:** buy cover → file a claim → receive an on-chain settlement.
+
+Every step is a public Solana transaction, so this number is independently
+verifiable from the chain rather than self-reported — anyone can audit it,
+including you.
+
+**Baseline today:** 2 wallets have completed the full lifecycle (3 have bought
+cover) — all internal test wallets.
+
+**Success:** 250 distinct wallets completing the full lifecycle by the end of
+the 12-week grant, with ≥100 by week 6. Below 50 I would consider the project to
+have failed to find users, and would report that publicly rather than quietly
+reframe the goal.
+
+**Secondary (protocol health):** share of claims settled autonomously with no
+human intervention — target ≥90%, with the remainder escalating to the verifier
+network rather than failing silently.
+
+*Why not installs / views / TVL: on devnet those are either unverifiable or
+meaningless — TVL in play money is theatre. Completed claim lifecycles is the
+only number that proves the core claim works AND can be checked in a block
+explorer.*
+
+**Measure it with:** `node solana/protocol-stats.js`
+
 ## 8. Why India
 
 India is both the sharpest version of the problem and the best place to prove
