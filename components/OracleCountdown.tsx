@@ -8,6 +8,9 @@ import { useEffect, useState } from "react";
 // longer. The countdown therefore shows the next *scheduled* slot, and the
 // telemetry shows when the oracle actually last ran.
 const WINDOW_MS = 30 * 60 * 1000;
+// The oracle's own heartbeat, written each run. Preferred over GitHub's API:
+// no rate limit, and it reflects the scheduler that actually runs the oracle.
+const STATUS_API = "https://crypsurance-faucet.surety.workers.dev/oracle-status";
 const RUNS_API =
   "https://api.github.com/repos/rjsalaria/crypsurance/actions/workflows/oracle.yml/runs?per_page=1&status=success";
 
@@ -36,6 +39,21 @@ function useLastRun(now: number) {
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
+      // 1) the oracle's own heartbeat
+      try {
+        const res = await fetch(STATUS_API);
+        if (res.ok) {
+          const data = await res.json();
+          if (!cancelled && typeof data?.at === "number") {
+            setStartedAt(data.at);
+            setFailed(false);
+            return;
+          }
+        }
+      } catch {
+        /* fall through to the workflow API */
+      }
+      // 2) fallback: the GitHub workflow run log
       try {
         const res = await fetch(RUNS_API, {
           headers: { Accept: "application/vnd.github+json" },

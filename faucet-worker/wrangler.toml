@@ -17,6 +17,12 @@ main = "src/index.js"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 
+# The claims oracle runs here, on Cloudflare's scheduler. GitHub Actions cron
+# is best-effort: it delayed our runs ~16 min on average and skipped enough of
+# them that real gaps reached 224 minutes. Cloudflare fires on time.
+[triggers]
+crons = ["*/30 * * * *"]
+
 # Non-secret settings (safe to commit)
 [vars]
 FAUCET_AMOUNT = "2500"   # SURETY per request

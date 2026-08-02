@@ -10,13 +10,15 @@ name: CrypSurance Claims Oracle
 #   RPC_URL           — Helius devnet RPC URL.
 #   AVIATIONSTACK_KEY — flight-data API key (optional; real-flight checks).
 
+# The scheduled oracle now runs on Cloudflare Cron Triggers
+# (faucet-worker/src/oracle.js). GitHub's cron is best-effort — it delayed our
+# runs by ~16 min on average and skipped enough of them that real gaps between
+# runs reached 224 minutes, which made "settles every 30 minutes" untrue.
+#
+# This workflow is kept as a manual backup: run it from the Actions tab if the
+# Worker is ever unavailable, or to settle a claim on demand.
 on:
-  schedule:
-    # every 30 minutes. The oracle only calls the flight-data API for
-    # NEW real-flight claims (once each — escalated and TEST-* claims never
-    # call it), so this comfortably respects the aviationstack free tier.
-    - cron: "*/30 * * * *"   # GitHub may delay scheduled runs under load
-  workflow_dispatch: {}       # allow manual runs from the Actions tab
+  workflow_dispatch: {}
 
 # never let two oracle runs overlap
 concurrency:
