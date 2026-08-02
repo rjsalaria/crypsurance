@@ -206,10 +206,76 @@ async function handle(request, env, origin) {
   return json({ signature, amount: amountUi, confirmed }, 200, origin);
 }
 
+/**
+ * Solana JSON-RPC proxy (POST /rpc).
+ *
+ * Solana's public devnet RPC throttles per IP hard enough that the dApp fails
+ * for ordinary visitors. This forwards read/send calls to the project's own
+ * RPC (the RPC_URL secret) so every visitor gets a reliable endpoint while the
+ * key stays server-side. Method allowlist + CORS lock keep it from becoming a
+ * free public RPC for anyone else.
+ */
+const RPC_METHODS = new Set([
+  "getBalance",
+  "getAccountInfo",
+  "getMultipleAccounts",
+  "getParsedTokenAccountsByOwner",
+  "getTokenAccountBalance",
+  "getSignaturesForAddress",
+  "getSignatureStatuses",
+  "getTransaction",
+  "getParsedTransaction",
+  "getLatestBlockhash",
+  "getFeeForMessage",
+  "getMinimumBalanceForRentExemption",
+  "sendTransaction",
+  "simulateTransaction",
+  "getEpochInfo",
+  "getSlot",
+  "getHealth",
+  "getVersion",
+  "getBlockHeight",
+]);
+
+async function handleRpc(request, env, origin) {
+  if (request.method !== "POST") {
+    return json({ error: "POST only" }, 405, origin);
+  }
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: "invalid JSON body" }, 400, origin);
+  }
+  const calls = Array.isArray(body) ? body : [body];
+  for (const c of calls) {
+    if (!c || !RPC_METHODS.has(c.method)) {
+      return json({ error: `method not allowed: ${c && c.method}` }, 403, origin);
+    }
+  }
+  const upstream = cleanStr(env.RPC_URL, "RPC_URL") || "https://api.devnet.solana.com";
+  const res = await fetch(upstream, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return new Response(await res.text(), {
+    status: res.status,
+    headers: { "Content-Type": "application/json", ...corsHeaders(origin) },
+  });
+}
+
 export default {
   async fetch(request, env) {
     const origin = request.headers.get("Origin");
     try {
+      const path = new URL(request.url).pathname.replace(/\/+$/, "");
+      if (path === "/rpc") {
+        if (request.method === "OPTIONS") {
+          return new Response(null, { headers: corsHeaders(origin) });
+        }
+        return await handleRpc(request, env, origin);
+      }
       return await handle(request, env, origin);
     } catch (e) {
       // Never surface a raw Cloudflare 1101 — return the real reason instead.
