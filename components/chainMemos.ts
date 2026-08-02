@@ -51,12 +51,31 @@ export function parseMemos(raw: string | null | undefined): ChainMemo[] {
  * concurrency made it fail outright). Reading memos off the signature list
  * does the same job in ~1s per address.
  */
+/** Retry with backoff — the public devnet RPC throttles per IP, so a busy
+ *  moment shouldn't surface as a hard failure. */
+async function withRetry<T>(fn: () => Promise<T>, attempts = 3): Promise<T> {
+  let lastError: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastError = e;
+      if (i < attempts - 1) {
+        await new Promise((r) => setTimeout(r, 500 * 2 ** i)); // 0.5s, 1s
+      }
+    }
+  }
+  throw lastError;
+}
+
 export async function fetchMemoHistory(
   connection: Connection,
   address: PublicKey,
   limit = 100
 ): Promise<MemoRecord[]> {
-  const sigs = await connection.getSignaturesForAddress(address, { limit });
+  const sigs = await withRetry(() =>
+    connection.getSignaturesForAddress(address, { limit })
+  );
   const out: MemoRecord[] = [];
   for (const s of sigs) {
     for (const memo of parseMemos(s.memo)) {
