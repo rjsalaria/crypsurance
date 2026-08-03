@@ -3,6 +3,7 @@ import Link from "next/link";
 import Blobs from "@/components/Blobs";
 import LiveDevnet from "@/components/LiveDevnet";
 import Faucet from "@/components/Faucet";
+import ProtocolStats from "@/components/ProtocolStats";
 
 export const metadata: Metadata = {
   title: "Testnet — The Real Protocol",
@@ -75,6 +76,13 @@ export default function TestnetPage() {
             </Link>
             .
           </p>
+        </div>
+      </section>
+
+      {/* live proof the protocol is actually being used */}
+      <section className="px-4 sm:px-6 pb-6">
+        <div className="mx-auto max-w-6xl">
+          <ProtocolStats />
         </div>
       </section>
 
