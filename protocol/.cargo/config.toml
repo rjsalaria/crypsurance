@@ -1,0 +1,12 @@
+# Solana's SBF build toolchain bundles cargo 1.84, which fails to even parse a
+# dependency whose manifest declares `edition = "2024"`. Left to itself the
+# resolver keeps picking such versions (blake3 -> digest -> block-buffer,
+# zeroize -> zeroize_derive, ...), so the build breaks on a new crate each time
+# one is pinned by hand.
+#
+# `fallback` makes the resolver honour the `rust-version` declared in
+# programs/protocol/Cargo.toml: it selects the newest dependency versions that
+# are actually compatible with that toolchain, instead of the newest that
+# exist. This fixes the whole class of failure rather than one crate at a time.
+[resolver]
+incompatible-rust-versions = "fallback"
