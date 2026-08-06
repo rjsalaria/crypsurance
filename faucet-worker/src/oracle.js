@@ -1,43 +1,32 @@
 /**
- * CrypSurance claims oracle — Cloudflare Cron Trigger edition.
+ * CrypSurance claims oracle — Cloudflare Cron Trigger edition (M2).
  *
- * Same job as solana/process-claims.js, but driven by Cloudflare's scheduler
- * instead of GitHub Actions. GitHub treats cron as best-effort: it delayed our
- * scheduled runs by ~16 minutes on average and skipped enough of them that the
- * real gap between runs ranged from 64 to 224 minutes. Cloudflare fires on
- * time, which is what makes "settles every 30 minutes" actually true.
+ * Reads Policy accounts from the on-chain program and settles them by calling
+ * `settle_claim` / `escalate_claim`. It no longer writes memos, and no longer
+ * moves tokens itself: the vault is owned by a program PDA, so an approval
+ * makes the *program* pay the policy's own holder. This oracle key can decide
+ * whether a claim is valid; it cannot decide where the money goes.
  *
- * Reads state from the pool token account's memo history, verifies each pending
- * claim, and pays / denies / escalates on-chain.
+ * Cloudflare's scheduler is used rather than GitHub Actions cron, which
+ * delayed runs ~16 min on average and skipped enough that real gaps between
+ * runs reached 224 minutes.
  *
- * Secrets: DEVNET_KEYPAIR, RPC_URL, AVIATIONSTACK_KEY (optional).
+ * Secrets: DEVNET_KEYPAIR (the oracle key), RPC_URL, AVIATIONSTACK_KEY.
  */
 
-import { Buffer } from "node:buffer";
+import { Connection, Keypair, PublicKey, Transaction } from "@solana/web3.js";
+import { getAssociatedTokenAddress, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import {
-  Connection,
-  Keypair,
-  PublicKey,
-  Transaction,
-  TransactionInstruction,
-} from "@solana/web3.js";
-import {
-  createAssociatedTokenAccountInstruction,
-  createTransferInstruction,
-  getAssociatedTokenAddress,
-} from "@solana/spl-token";
+  escalateClaimIx,
+  fetchPolicies,
+  poolPda,
+  settleClaimIx,
+  vaultPda,
+} from "./protocol.js";
 
 const SURETY_MINT = new PublicKey(
   "8wAqKooKyqubCG9nNx2bfcq9TQ9jEJxojyhAMAdfsHn9"
 );
-const POOL_WALLET = new PublicKey(
-  "9txXv5nFKu4E9AmykbcLGSRiyxM19C81HJqFmJbsBkxy"
-);
-// Memo v1 — v2 is not deployed on devnet
-const MEMO_PROGRAM = new PublicKey(
-  "Memo1UhkJRfHyvLMcVucJwxXeuD728EqVDDwQDxFMNo"
-);
-const DECIMALS = 9n;
 const DELAY_THRESHOLD_MIN = 180;
 
 function clean(v, name) {
@@ -45,20 +34,6 @@ function clean(v, name) {
   let s = String(v).trim().replace(/^["']|["']$/g, "").trim();
   if (name && s.startsWith(name + "=")) s = s.slice(name.length + 1).trim();
   return s;
-}
-
-/** Memos ride along on the signature list — no transaction fetches needed. */
-function memosFrom(raw) {
-  if (!raw) return [];
-  const out = [];
-  for (const m of String(raw).matchAll(/\{[^{}]*\}/g)) {
-    try {
-      out.push(JSON.parse(m[0]));
-    } catch {
-      /* not ours */
-    }
-  }
-  return out;
 }
 
 async function verifyFlight(flight, date, apiKey) {
@@ -69,8 +44,8 @@ async function verifyFlight(flight, date, apiKey) {
   if (!apiKey)
     return { skip: true, reason: "real flight, no AVIATIONSTACK_KEY set" };
 
-  // Free tier rejects the flight_date param, so query by flight number and
-  // match the date client-side.
+  // The free tier rejects the flight_date param, so query by flight number
+  // and match the date client-side.
   const url = `https://api.aviationstack.com/v1/flights?access_key=${apiKey}&flight_iata=${encodeURIComponent(flight)}`;
   const res = await fetch(url);
   const j = await res.json();
@@ -86,12 +61,15 @@ async function verifyFlight(flight, date, apiKey) {
   const rec = recs.find((r) => r.flight_date === date);
   if (!rec) {
     const seen = [...new Set(recs.map((r) => r.flight_date))].join(", ");
-    return { skip: true, reason: `no record for ${date} yet (feed covers: ${seen || "none"})` };
+    return {
+      skip: true,
+      reason: `no record for ${date} yet (feed covers: ${seen || "none"})`,
+    };
   }
   const delayMin = Math.max(rec.departure?.delay ?? 0, rec.arrival?.delay ?? 0);
   return {
     delayed: delayMin >= DELAY_THRESHOLD_MIN,
-    basis: `aviationstack ${rec.flight_date} delay=${delayMin}min`,
+    basis: `aviationstack ${rec.flight_date} delay=${delayMin}min`.slice(0, 64),
   };
 }
 
@@ -107,7 +85,10 @@ async function sendAndConfirm(conn, tx, signer) {
     const { value } = await conn.getSignatureStatuses([sig]);
     const st = value[0];
     if (st?.err) throw new Error(`tx failed: ${JSON.stringify(st.err)}`);
-    if (st?.confirmationStatus === "confirmed" || st?.confirmationStatus === "finalized") {
+    if (
+      st?.confirmationStatus === "confirmed" ||
+      st?.confirmationStatus === "finalized"
+    ) {
       return sig;
     }
   }
@@ -120,114 +101,58 @@ export async function runOracle(env) {
   const apiKey = clean(env.AVIATIONSTACK_KEY, "AVIATIONSTACK_KEY");
   const conn = new Connection(rpc, { commitment: "confirmed" });
 
-  const pool = Keypair.fromSecretKey(
+  const oracle = Keypair.fromSecretKey(
     Uint8Array.from(JSON.parse(clean(env.DEVNET_KEYPAIR, "DEVNET_KEYPAIR")))
   );
-  if (!pool.publicKey.equals(POOL_WALLET)) {
-    throw new Error("DEVNET_KEYPAIR is not the pool wallet");
-  }
-  const poolAta = await getAssociatedTokenAddress(SURETY_MINT, POOL_WALLET);
 
-  // One call gives the whole state: memos come back on the signature list.
-  const sigs = await conn.getSignaturesForAddress(poolAta, { limit: 1000 });
-  const policies = new Map();
-  const requests = new Set();
-  const settled = new Set();
-  const escalated = new Set();
+  const pool = poolPda();
+  const vault = vaultPda(pool);
 
-  for (let i = sigs.length - 1; i >= 0; i--) {
-    for (const m of memosFrom(sigs[i].memo)) {
-      if (m.kind === "policy" && m.flight && m.id) policies.set(m.id, m);
-      else if (m.kind === "claim-request" && m.policy) requests.add(m.policy);
-      else if ((m.kind === "claim-paid" || m.kind === "claim-denied") && m.policy)
-        settled.add(m.policy);
-      else if (m.kind === "verify-request" && m.policy) escalated.add(m.policy);
-    }
-  }
+  const policies = await fetchPolicies(conn);
+  const pending = policies.filter((p) => p.status === "requested");
+  const awaiting = policies.filter((p) => p.status === "escalated");
+  log.push(
+    `${policies.length} policies · ${pending.length} pending · ${awaiting.length} awaiting offline verification`
+  );
 
-  const pending = [...requests].filter((id) => !settled.has(id) && policies.has(id));
-  log.push(`scanned ${sigs.length} txs · policies ${policies.size} · pending ${pending.length}`);
-
-  for (const id of pending) {
-    const p = policies.get(id);
-    const holder = new PublicKey(p.holder);
-    const holderAta = await getAssociatedTokenAddress(SURETY_MINT, holder);
-
-    // Already escalated: never re-hit the paid flight API for it.
-    if (escalated.has(id)) {
-      log.push(`~ ${id} awaiting offline verification`);
-      continue;
-    }
+  for (const p of pending) {
+    const holderToken = await getAssociatedTokenAddress(
+      SURETY_MINT,
+      p.holder
+    );
+    const accounts = {
+      oracle: oracle.publicKey,
+      pool,
+      policy: p.address,
+      vault,
+      holderToken,
+      tokenProgram: TOKEN_PROGRAM_ID,
+    };
 
     const verdict = await verifyFlight(p.flight, p.date, apiKey);
 
+    // Inconclusive data escalates to human verification rather than guessing.
+    // On-chain status keeps this to one API call per claim: once escalated the
+    // policy is no longer `requested`, so it is never re-checked here.
     if (verdict.skip) {
-      const memo = JSON.stringify({
-        v: 2, kind: "verify-request", policy: id,
-        flight: p.flight, date: p.date, reason: verdict.reason,
-      });
       const tx = new Transaction().add(
-        new TransactionInstruction({
-          // both accounts so it shows in the public console AND the holder's wallet
-          keys: [
-            { pubkey: poolAta, isSigner: false, isWritable: false },
-            { pubkey: holderAta, isSigner: false, isWritable: false },
-          ],
-          programId: MEMO_PROGRAM,
-          data: Buffer.from(memo, "utf8"),
-        })
+        escalateClaimIx(accounts, verdict.reason.slice(0, 64))
       );
-      const sig = await sendAndConfirm(conn, tx, pool);
-      log.push(`? ${id} escalated (${verdict.reason}) ${sig.slice(0, 8)}…`);
+      const sig = await sendAndConfirm(conn, tx, oracle);
+      log.push(`? ${p.flight} escalated (${verdict.reason}) ${sig.slice(0, 8)}…`);
       continue;
     }
 
-    const memo = JSON.stringify({
-      v: 2,
-      kind: verdict.delayed ? "claim-paid" : "claim-denied",
-      policy: id,
-      flight: p.flight,
-      basis: verdict.basis,
-    });
-    const tx = new Transaction();
-    if (verdict.delayed) {
-      if (!(await conn.getAccountInfo(holderAta))) {
-        tx.add(
-          createAssociatedTokenAccountInstruction(
-            pool.publicKey, holderAta, holder, SURETY_MINT
-          )
-        );
-      }
-      tx.add(
-        createTransferInstruction(
-          poolAta, holderAta, pool.publicKey,
-          BigInt(p.payout) * 10n ** DECIMALS
-        )
-      );
-      tx.add(
-        new TransactionInstruction({
-          keys: [], programId: MEMO_PROGRAM, data: Buffer.from(memo, "utf8"),
-        })
-      );
-    } else {
-      tx.add(
-        new TransactionInstruction({
-          keys: [
-            { pubkey: poolAta, isSigner: false, isWritable: false },
-            { pubkey: holderAta, isSigner: false, isWritable: false },
-          ],
-          programId: MEMO_PROGRAM,
-          data: Buffer.from(memo, "utf8"),
-        })
-      );
-    }
-    const sig = await sendAndConfirm(conn, tx, pool);
+    const tx = new Transaction().add(
+      settleClaimIx(accounts, verdict.delayed, verdict.basis)
+    );
+    const sig = await sendAndConfirm(conn, tx, oracle);
     log.push(
-      `${verdict.delayed ? "✓ paid" : "✗ denied"} ${id} [${verdict.basis}] ${sig.slice(0, 8)}…`
+      `${verdict.delayed ? "✓ paid" : "✗ denied"} ${p.flight} ${p.payout} SURETY [${verdict.basis}] ${sig.slice(0, 8)}…`
     );
   }
 
-  // Heartbeat so the site can show a real "last run" without GitHub's API.
+  // Heartbeat so the site can show a real "last run".
   if (env.FAUCET_KV) {
     try {
       await env.FAUCET_KV.put(
