@@ -10,11 +10,16 @@ skip-lint = false
 [programs.localnet]
 protocol = "4V7SWWpKRqFF5QZhPYKBMxHeEag3g2Cr1mhbtaSUjtdr"
 
+[programs.devnet]
+protocol = "4V7SWWpKRqFF5QZhPYKBMxHeEag3g2Cr1mhbtaSUjtdr"
+
 [registry]
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "localnet"
+# Deploys and devnet runs override this on the command line with the project's
+# RPC endpoint — that URL carries an API key, so it stays out of this file.
+cluster = "devnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]
