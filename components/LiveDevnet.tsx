@@ -29,10 +29,9 @@ import {
   confirmSignature,
   DEVNET_RPC,
   devnetFetch,
-  fetchMemoHistory,
-  mergeMemoRecords,
   withWalletTimeout,
 } from "./chainMemos";
+import { buyCoverIx, fetchPolicies, fileClaimIx, policyPda } from "./protocolClient";
 
 /** The real SURETY devnet mint created by solana/create-token.js. */
 const SURETY_MINT = new PublicKey(
@@ -56,6 +55,8 @@ const WalletMultiButton = dynamic(
 );
 
 const fmt = (n: number) => n.toLocaleString("en-US");
+/** Policy ids are account addresses now, so show them the way chains do. */
+const shortId = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 
 /* ------------------------------------------------------------------ */
 /* balances                                                            */
@@ -148,33 +149,22 @@ function BuyCover({
     setBusy(true);
     setError("");
     try {
-      const policyId = `CSD-${Date.now().toString(36).toUpperCase()}`;
-      const fromAta = await getAssociatedTokenAddress(SURETY_MINT, publicKey);
-      const toAta = await getAssociatedTokenAddress(SURETY_MINT, POOL_WALLET);
-
-      const memo = JSON.stringify({
-        v: 2,
-        kind: "policy",
-        product: "travel-delay",
-        id: policyId,
-        flight,
-        date,
-        payout,
-        premium,
-        holder: publicKey.toBase58(),
-      });
+      // One instruction to the protocol program: it creates the policy
+      // account and moves the premium into the program-owned vault itself.
+      // The premium is recomputed on-chain from the payout, so what the UI
+      // shows is a preview, not an input the program trusts.
+      const nonce = BigInt(Date.now());
+      const holderToken = await getAssociatedTokenAddress(SURETY_MINT, publicKey);
+      const policyAddress = policyPda(publicKey, nonce);
 
       const tx = new Transaction().add(
-        createTransferInstruction(
-          fromAta,
-          toAta,
-          publicKey,
-          BigInt(premium) * 10n ** DECIMALS
-        ),
-        new TransactionInstruction({
-          keys: [],
-          programId: MEMO_PROGRAM,
-          data: Buffer.from(memo, "utf8"),
+        buyCoverIx({
+          holder: publicKey,
+          holderToken,
+          nonce,
+          flight,
+          date,
+          payout,
         })
       );
 
@@ -185,7 +175,7 @@ function BuyCover({
       await confirmSignature(connection, signature);
 
       setPurchase({
-        policyId,
+        policyId: policyAddress.toBase58(),
         payout,
         premium,
         signature,
@@ -369,12 +359,15 @@ function BuyCover({
 /* ------------------------------------------------------------------ */
 
 type PolicyRow = {
+  /** The policy's on-chain account address. */
   id: string;
   flight: string;
   date: string;
   payout: number;
   premium: number;
   status: "active" | "requested" | "manual" | "paid" | "denied";
+  /** Why the oracle decided as it did, recorded on the policy account. */
+  basis?: string;
   paidSig?: string;
   buySig?: string;
 };
@@ -399,68 +392,23 @@ function MyPolicies({
     setScanning(true);
     setError("");
     try {
-      // Read this wallet's OWN history rather than replaying the pool's.
-      // The pool account is a shared log that grows with every user and every
-      // faucet drip, and fetching transactions from the public devnet RPC
-      // rate-limits immediately. Memos come back on the signature list itself,
-      // so this is two RPC calls instead of dozens.
-      const userAta = await getAssociatedTokenAddress(SURETY_MINT, publicKey);
-      const poolAta = await getAssociatedTokenAddress(SURETY_MINT, POOL_WALLET);
-      // The holder's own history is what actually matters; recent pool activity
-      // is only a fallback for settlement status (denials and escalations move
-      // no tokens, so older ones are visible nowhere else). Policies are
-      // filtered to this holder below, so other users' rows can't leak in.
-      // allSettled: a throttled pool call must not wipe out the whole list.
-      const [walletRes, ataRes, poolRes] = await Promise.allSettled([
-        fetchMemoHistory(connection, publicKey, 60),
-        fetchMemoHistory(connection, userAta, 60),
-        fetchMemoHistory(connection, poolAta, 100),
-      ]);
-      if (walletRes.status === "rejected" && ataRes.status === "rejected") {
-        throw walletRes.reason;
-      }
-      const val = <T,>(r: PromiseSettledResult<T[]>): T[] =>
-        r.status === "fulfilled" ? r.value : [];
-      const records = mergeMemoRecords(
-        val(walletRes),
-        val(ataRes),
-        val(poolRes)
+      // One filtered query returns this wallet's policies as structured
+      // accounts. No memo replay, no reconstructing status from a stream of
+      // events — the status IS a field, written by the program.
+      const policies = await fetchPolicies(connection, publicKey);
+
+      setRows(
+        policies.map((p) => ({
+          id: p.address,
+          flight: p.flight,
+          date: p.date,
+          payout: p.payout,
+          premium: p.premium,
+          // "manual" is this UI's label for the program's `escalated`
+          status: p.status === "escalated" ? "manual" : p.status,
+          basis: p.basis,
+        }))
       );
-
-      const me = publicKey.toBase58();
-      const policies = new Map<string, PolicyRow>();
-      const requested = new Set<string>();
-      const manual = new Set<string>();
-      const paid = new Map<string, string>();
-      const denied = new Set<string>();
-
-      for (const { memo: m, signature } of records) {
-        if (m.kind === "policy" && m.holder === me && m.flight && m.id) {
-          policies.set(m.id, {
-            id: m.id,
-            flight: m.flight,
-            date: m.date ?? "—",
-            payout: m.payout ?? 0,
-            premium: m.premium ?? 0,
-            status: "active",
-            buySig: signature,
-          });
-        } else if (m.policy) {
-          if (m.kind === "claim-request") requested.add(m.policy);
-          else if (m.kind === "verify-request") manual.add(m.policy);
-          else if (m.kind === "claim-paid") paid.set(m.policy, signature);
-          else if (m.kind === "claim-denied") denied.add(m.policy);
-        }
-      }
-
-      const list = [...policies.values()].map((p) => {
-        if (paid.has(p.id)) return { ...p, status: "paid" as const, paidSig: paid.get(p.id) };
-        if (denied.has(p.id)) return { ...p, status: "denied" as const };
-        if (manual.has(p.id)) return { ...p, status: "manual" as const };
-        if (requested.has(p.id)) return { ...p, status: "requested" as const };
-        return p;
-      });
-      setRows(list.reverse());
     } catch (e) {
       // Surface the real reason — "RPC busy" hid genuine bugs before.
       const raw = e instanceof Error ? e.message : String(e);
@@ -487,21 +435,10 @@ function MyPolicies({
       setBusyId(row.id);
       setError("");
       try {
-        const poolAta = await getAssociatedTokenAddress(SURETY_MINT, POOL_WALLET);
-        const memo = JSON.stringify({
-          v: 2,
-          kind: "claim-request",
-          policy: row.id,
-          holder: publicKey.toBase58(),
-        });
+        // The program checks that the signer owns this policy and that it is
+        // still claimable, so the UI doesn't have to be trusted about either.
         const tx = new Transaction().add(
-          new TransactionInstruction({
-            // referencing the pool token account makes this tx visible to the
-            // pool-address scan that the operator and this UI both use
-            keys: [{ pubkey: poolAta, isSigner: false, isWritable: false }],
-            programId: MEMO_PROGRAM,
-            data: Buffer.from(memo, "utf8"),
-          })
+          fileClaimIx(publicKey, new PublicKey(row.id))
         );
         const signature = await withWalletTimeout(
           sendTransaction(tx, connection)
@@ -568,7 +505,7 @@ function MyPolicies({
                       title="View policy certificate"
                       className="font-mono text-cyan-neon hover:underline underline-offset-2 decoration-dotted inline-flex items-center gap-1"
                     >
-                      {r.id}
+                      {shortId(r.id)}
                       <span className="text-[10px] opacity-70">▣</span>
                     </button>
                   </td>

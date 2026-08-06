@@ -108,7 +108,14 @@ export async function runOracle(env) {
   const pool = poolPda();
   const vault = vaultPda(pool);
 
-  const policies = await fetchPolicies(conn);
+  // Helius' free tier rejects getProgramAccounts with a 503, so the policy
+  // listing goes to the public RPC while transactions still go through
+  // Helius, which is far more reliable for sends. Small, infrequent read.
+  const readConn = new Connection(
+    clean(env.GPA_RPC_URL, "GPA_RPC_URL") || "https://api.devnet.solana.com",
+    { commitment: "confirmed" }
+  );
+  const policies = await fetchPolicies(readConn);
   const pending = policies.filter((p) => p.status === "requested");
   const awaiting = policies.filter((p) => p.status === "escalated");
   log.push(

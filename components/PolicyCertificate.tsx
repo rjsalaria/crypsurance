@@ -144,7 +144,8 @@ export default function PolicyCertificate({
 
           {/* data grid */}
           {[
-            { label: "CERTIFICATE No.", value: policy.id, color: "#22d3ee" },
+            // the policy's on-chain account address — abbreviated to fit
+            { label: "CERTIFICATE No.", value: short(policy.id), color: "#22d3ee" },
             { label: "POLICYHOLDER", value: short(holder), color: "#eae6ff" },
             { label: "FLIGHT", value: policy.flight, color: "#eae6ff" },
             { label: "COVERED DATE", value: policy.date, color: "#eae6ff" },
