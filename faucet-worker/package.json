@@ -13,6 +13,6 @@
     "@solana/web3.js": "^1.95.4"
   },
   "devDependencies": {
-    "wrangler": "^3.80.0"
+    "wrangler": "^4.119.0"
   }
 }

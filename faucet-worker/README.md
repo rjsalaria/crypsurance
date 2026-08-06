@@ -115,6 +115,31 @@ curl -X POST https://crypsurance-faucet.surety.workers.dev \
 # -> {"signature":"...","amount":2500,"confirmed":true}
 ```
 
+## ⚠️ Never run `npm audit fix --force` here
+
+It "fixes" advisories by downgrading, and for this dependency set it rewrites
+`package.json` to `@solana/web3.js@^0.0.3` and `@solana/spl-token@^0.1.8` —
+a 2017 placeholder package and an ancient release. The deploy then fails with
+confusing errors like:
+
+```
+No matching export in "@solana/spl-token/lib/index.browser.esm.js"
+  for import "getAssociatedTokenAddress"
+Import "Connection" will always be undefined because
+  "@solana/web3.js/lib/index.iife.js" has no exports
+```
+
+That is not a bundler or Wrangler problem — it means the wrong packages are
+installed. Recover with:
+
+```bash
+git checkout HEAD -- package.json
+rm -rf node_modules package-lock.json
+npm install
+```
+
+Plain `npm audit` is fine; it is only `--force` that downgrades.
+
 ## Security
 Devnet only — play money; never put a mainnet key here. The signing key is a
 Cloudflare **secret**, not in the repo. `.gitignore` keeps `node_modules/`,
