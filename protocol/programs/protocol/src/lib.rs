@@ -25,8 +25,21 @@ declare_id!("4V7SWWpKRqFF5QZhPYKBMxHeEag3g2Cr1mhbtaSUjtdr");
 pub const PREMIUM_BPS: u64 = 240;
 pub const BPS_DENOM: u64 = 10_000;
 
+/// Payout and premium are denominated in **whole tokens** throughout the
+/// protocol's public surface (a 10,000 SURETY payout is `payout = 10_000`),
+/// matching how the product talks about cover. Token transfers need base
+/// units, so every transfer converts using the mint's decimals — recorded on
+/// the pool at initialisation rather than hardcoded.
 pub const MIN_PAYOUT: u64 = 1_000;
 pub const MAX_PAYOUT: u64 = 50_000;
+
+/// Whole tokens -> base units for the pool's mint.
+fn to_base_units(amount: u64, decimals: u8) -> Result<u64> {
+    let factor = 10u64
+        .checked_pow(decimals as u32)
+        .ok_or(CoverError::MathOverflow)?;
+    Ok(amount.checked_mul(factor).ok_or(CoverError::MathOverflow)?)
+}
 
 #[program]
 pub mod protocol {
@@ -39,6 +52,7 @@ pub mod protocol {
         pool.authority = ctx.accounts.authority.key();
         pool.oracle = oracle;
         pool.mint = ctx.accounts.mint.key();
+        pool.decimals = ctx.accounts.mint.decimals;
         pool.policies = 0;
         pool.claims_paid = 0;
         pool.claims_denied = 0;
@@ -79,6 +93,7 @@ pub mod protocol {
         let premium = if premium == 0 { 1 } else { premium };
 
         // Premium in. The holder signs this transfer themselves.
+        let premium_base = to_base_units(premium, ctx.accounts.pool.decimals)?;
         token::transfer(
             CpiContext::new(
                 ctx.accounts.token_program.to_account_info(),
@@ -88,7 +103,7 @@ pub mod protocol {
                     authority: ctx.accounts.holder.to_account_info(),
                 },
             ),
-            premium,
+            premium_base,
         )?;
 
         let policy = &mut ctx.accounts.policy;
@@ -153,7 +168,7 @@ pub mod protocol {
         );
 
         if approved {
-            let payout = ctx.accounts.policy.payout;
+            let payout = to_base_units(ctx.accounts.policy.payout, ctx.accounts.pool.decimals)?;
             require!(
                 ctx.accounts.vault.amount >= payout,
                 CoverError::PoolUnderfunded
@@ -236,6 +251,9 @@ pub struct Pool {
     pub authority: Pubkey,
     pub oracle: Pubkey,
     pub mint: Pubkey,
+    /// Decimals of `mint`, so whole-token amounts can be converted to base
+    /// units without hardcoding a value that only holds for SURETY.
+    pub decimals: u8,
     pub policies: u64,
     pub claims_paid: u64,
     pub claims_denied: u64,
