@@ -243,7 +243,16 @@ const RPC_METHODS = new Set([
   "getHealth",
   "getVersion",
   "getBlockHeight",
+  // Listing Policy accounts. Constrained below to this project's program so
+  // the proxy can't be used as a general-purpose indexer against our quota.
+  "getProgramAccounts",
 ]);
+
+/** The CrypSurance protocol program — the only program getProgramAccounts may target. */
+const PROTOCOL_PROGRAM_ID = "4V7SWWpKRqFF5QZhPYKBMxHeEag3g2Cr1mhbtaSUjtdr";
+
+/** Helius' free tier answers getProgramAccounts with a 503, so it goes here. */
+const GPA_RPC = "https://api.devnet.solana.com";
 
 async function handleRpc(request, env, origin) {
   if (request.method !== "POST") {
@@ -256,12 +265,26 @@ async function handleRpc(request, env, origin) {
     return json({ error: "invalid JSON body" }, 400, origin);
   }
   const calls = Array.isArray(body) ? body : [body];
+  let needsGpaRpc = false;
   for (const c of calls) {
     if (!c || !RPC_METHODS.has(c.method)) {
       return json({ error: `method not allowed: ${c && c.method}` }, 403, origin);
     }
+    if (c.method === "getProgramAccounts") {
+      // Only ever for our own program.
+      if (c.params?.[0] !== PROTOCOL_PROGRAM_ID) {
+        return json(
+          { error: "getProgramAccounts is restricted to the CrypSurance program" },
+          403,
+          origin
+        );
+      }
+      needsGpaRpc = true;
+    }
   }
-  const upstream = cleanStr(env.RPC_URL, "RPC_URL") || "https://api.devnet.solana.com";
+  const upstream = needsGpaRpc
+    ? GPA_RPC
+    : cleanStr(env.RPC_URL, "RPC_URL") || "https://api.devnet.solana.com";
   const res = await fetch(upstream, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

@@ -30,5 +30,9 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules"]
+  // protocol/ and faucet-worker/ are separate projects with their own
+  // tsconfig, dependencies and runtimes (Anchor tests, Cloudflare Worker).
+  // Typechecking them as part of the web app pulls in types the app doesn't
+  // install, so they are compiled where they live.
+  "exclude": ["node_modules", "protocol", "faucet-worker"]
 }
