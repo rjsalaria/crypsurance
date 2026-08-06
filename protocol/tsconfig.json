@@ -2,9 +2,11 @@
   "compilerOptions": {
     "types": ["mocha", "chai"],
     "typeRoots": ["./node_modules/@types"],
-    "lib": ["es2015"],
+    // ES2020 rather than the scaffold's ES6: token amounts are BigInt, and an
+    // ES6 target downlevels `10n ** 9n` into Math.pow, which throws at runtime.
+    "lib": ["es2020"],
     "module": "commonjs",
-    "target": "es6",
+    "target": "es2020",
     "esModuleInterop": true
   }
 }
