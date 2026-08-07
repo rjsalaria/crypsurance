@@ -115,6 +115,41 @@ curl -X POST https://crypsurance-faucet.surety.workers.dev \
 # -> {"signature":"...","amount":2500,"confirmed":true}
 ```
 
+## Oracle trigger (Cloudflare cron → GitHub)
+
+The claims oracle does **not** run in this Worker. It needs
+`getProgramAccounts` to list pending policies, and no endpoint serves that from
+Cloudflare's IP ranges — Helius doesn't offer it, and Solana's public RPC
+returns `403 Your IP or provider is blocked`. A GitHub runner can, so the
+oracle lives in [`protocol/scripts/oracle.js`](../protocol/scripts/oracle.js).
+
+GitHub's own `schedule` is best-effort: measured over 12 runs it was **16.5
+minutes late on average**, with real gaps between runs of 64–224 minutes.
+Cloudflare's cron fires within seconds of the boundary. So the Worker supplies
+the timing and GitHub supplies the network access — the cron here calls
+`workflow_dispatch`, which isn't queued behind the same backlog.
+
+Setup (one time):
+
+1. Create a **fine-grained personal access token** at
+   <https://github.com/settings/personal-access-tokens/new>
+   - Repository access: only `rjsalaria/crypsurance`
+   - Permissions → Repository → **Actions: Read and write**
+2. Store it and deploy:
+   ```bash
+   npx wrangler secret put GITHUB_TOKEN
+   npx wrangler deploy
+   ```
+3. Verify without waiting for the cron:
+   ```bash
+   curl https://crypsurance-faucet.surety.workers.dev/dispatch-oracle
+   ```
+   A run should appear immediately under the repo's Actions tab.
+
+The workflow keeps its own `schedule:` as a backstop if the Worker or the token
+ever fails. Double runs are harmless — the oracle only settles policies still
+in `requested`, and the workflow's concurrency group serialises them.
+
 ## ⚠️ Never run `npm audit fix --force` here
 
 It "fixes" advisories by downgrading, and for this dependency set it rewrites
