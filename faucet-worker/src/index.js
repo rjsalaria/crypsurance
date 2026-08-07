@@ -250,8 +250,64 @@ const RPC_METHODS = new Set([
 /** The CrypSurance protocol program — the only program getProgramAccounts may target. */
 const PROTOCOL_PROGRAM_ID = "4V7SWWpKRqFF5QZhPYKBMxHeEag3g2Cr1mhbtaSUjtdr";
 
-/** Helius' free tier answers getProgramAccounts with a 503, so it goes here. */
+/** Helius doesn't serve getProgramAccounts, so it goes here. */
 const GPA_RPC = "https://api.devnet.solana.com";
+
+/* ------------------------------------------------------------------ */
+/* oracle trigger                                                      */
+/* ------------------------------------------------------------------ */
+
+const GH_REPO = "rjsalaria/crypsurance";
+const GH_WORKFLOW = "oracle.yml";
+
+/**
+ * Ask GitHub to run the claims oracle now.
+ *
+ * The oracle itself can't run in this Worker: it needs getProgramAccounts to
+ * list pending policies, and no endpoint serves that from Cloudflare IPs
+ * (Helius doesn't offer it; Solana's public RPC blocks Cloudflare). A GitHub
+ * runner can, so the work happens there.
+ *
+ * But GitHub's own `schedule` is best-effort — it delayed our runs by ~16
+ * minutes on average and skipped enough that real gaps reached 224 minutes.
+ * `workflow_dispatch` is not subject to that backlog, so Cloudflare's punctual
+ * cron supplies the timing and GitHub supplies the network access.
+ */
+async function dispatchOracle(env) {
+  const token = cleanStr(env.GITHUB_TOKEN, "GITHUB_TOKEN");
+  if (!token) throw new Error("GITHUB_TOKEN secret is not set");
+
+  const res = await fetch(
+    `https://api.github.com/repos/${GH_REPO}/actions/workflows/${GH_WORKFLOW}/dispatches`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        // GitHub rejects API requests without one.
+        "User-Agent": "crypsurance-oracle-trigger",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ ref: "main" }),
+    }
+  );
+
+  if (res.status !== 204) {
+    throw new Error(`GitHub dispatch failed: ${res.status} ${await res.text()}`);
+  }
+  if (env.FAUCET_KV) {
+    try {
+      await env.FAUCET_KV.put(
+        "oracle:last-dispatch",
+        JSON.stringify({ at: Date.now() })
+      );
+    } catch {
+      /* non-fatal */
+    }
+  }
+  return true;
+}
 
 async function handleRpc(request, env, origin) {
   if (request.method !== "POST") {
@@ -306,6 +362,21 @@ export default {
       if (path === "/rpc") {
         return await handleRpc(request, env, origin);
       }
+      // Manual oracle trigger, for verifying the wiring without waiting for
+      // the cron. Throttled via KV so it can't be used to burn CI minutes.
+      if (path === "/dispatch-oracle") {
+        if (env.FAUCET_KV) {
+          const last = await env.FAUCET_KV.get("oracle:dispatch-throttle");
+          if (last) {
+            return json({ error: "Just dispatched — try again shortly." }, 429, origin);
+          }
+          await env.FAUCET_KV.put("oracle:dispatch-throttle", "1", {
+            expirationTtl: 120,
+          });
+        }
+        await dispatchOracle(env);
+        return json({ dispatched: true }, 200, origin);
+      }
       return await handle(request, env, origin);
     } catch (e) {
       // Never surface a raw Cloudflare 1101 — return the real reason instead.
@@ -314,4 +385,16 @@ export default {
     }
   },
 
+  /**
+   * Cron Trigger. Cloudflare fires punctually (measured: 6 seconds past the
+   * boundary), so it supplies the timing while GitHub supplies the RPC access
+   * the oracle needs.
+   */
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(
+      dispatchOracle(env).catch((e) => {
+        console.error("oracle dispatch failed:", e && e.message ? e.message : e);
+      })
+    );
+  },
 };
