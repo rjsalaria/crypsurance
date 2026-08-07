@@ -24,7 +24,6 @@ import {
   createAssociatedTokenAccountInstruction,
   createTransferInstruction,
 } from "@solana/spl-token";
-import { runOracle } from "./oracle.js";
 
 const SURETY_MINT = new PublicKey(
   "8wAqKooKyqubCG9nNx2bfcq9TQ9jEJxojyhAMAdfsHn9"
@@ -307,20 +306,6 @@ export default {
       if (path === "/rpc") {
         return await handleRpc(request, env, origin);
       }
-      // Public heartbeat: when the oracle genuinely last ran. The site reads
-      // this instead of GitHub's API (no rate limit, and it reflects the
-      // scheduler that actually runs the oracle).
-      if (path === "/oracle-status") {
-        const raw = env.FAUCET_KV
-          ? await env.FAUCET_KV.get("oracle:last-run")
-          : null;
-        return json(raw ? JSON.parse(raw) : { at: null }, 200, origin);
-      }
-      // Manual trigger, handy for demos and for verifying a deploy.
-      if (path === "/run-oracle") {
-        const log = await runOracle(env);
-        return json({ ok: true, log }, 200, origin);
-      }
       return await handle(request, env, origin);
     } catch (e) {
       // Never surface a raw Cloudflare 1101 — return the real reason instead.
@@ -329,16 +314,4 @@ export default {
     }
   },
 
-  /**
-   * Cron Trigger (see [triggers] in wrangler.toml). Cloudflare fires this on
-   * schedule reliably, unlike GitHub Actions cron, which delayed our runs by
-   * ~16 min on average and skipped enough that real gaps hit 224 minutes.
-   */
-  async scheduled(event, env, ctx) {
-    ctx.waitUntil(
-      runOracle(env).catch((e) => {
-        console.error("oracle run failed:", e && e.message ? e.message : e);
-      })
-    );
-  },
 };

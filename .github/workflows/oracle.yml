@@ -1,26 +1,26 @@
 name: CrypSurance Claims Oracle
 
-# Runs the testnet claims oracle automatically ~every 15 minutes so
-# pending claims settle on-chain without anyone running it by hand.
+# Settles pending claims by calling the on-chain program.
 #
-# Required repository secrets (Settings → Secrets and variables → Actions):
-#   DEVNET_KEYPAIR    — contents of solana/devnet-test.json (the byte array).
-#                       This is the DEVNET pool wallet key. Play money only —
-#                       NEVER put a mainnet key here.
-#   RPC_URL           — Helius devnet RPC URL.
-#   AVIATIONSTACK_KEY — flight-data API key (optional; real-flight checks).
+# This runs here rather than in the Cloudflare Worker because no RPC available
+# to us serves account reads from Cloudflare's IP ranges: Helius' free tier
+# rejects getAccountInfo / getMultipleAccounts / getProgramAccounts outright,
+# and Solana's public RPC blocks Cloudflare. GitHub runners can use the public
+# RPC, so the oracle lives here; the Worker keeps the faucet and RPC proxy.
+#
+# GitHub's cron is best effort — it delayed our scheduled runs by ~16 minutes
+# on average and skipped enough that real gaps reached 224 minutes. The public
+# run history is the honest record of when it actually ran.
+#
+# Required secrets: DEVNET_KEYPAIR (the oracle key), AVIATIONSTACK_KEY.
+# RPC_URL is deliberately NOT used: Helius cannot serve the account reads this
+# needs, so the default public RPC is correct here.
 
-# The scheduled oracle now runs on Cloudflare Cron Triggers
-# (faucet-worker/src/oracle.js). GitHub's cron is best-effort — it delayed our
-# runs by ~16 min on average and skipped enough of them that real gaps between
-# runs reached 224 minutes, which made "settles every 30 minutes" untrue.
-#
-# This workflow is kept as a manual backup: run it from the Actions tab if the
-# Worker is ever unavailable, or to settle a claim on demand.
 on:
+  schedule:
+    - cron: "*/30 * * * *"
   workflow_dispatch: {}
 
-# never let two oracle runs overlap
 concurrency:
   group: claims-oracle
   cancel-in-progress: false
@@ -35,20 +35,19 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Install oracle dependencies
-        working-directory: solana
-        run: npm ci --no-audit --no-fund
+      - name: Install client dependencies
+        working-directory: protocol
+        run: npm install --no-audit --no-fund
 
-      - name: Write devnet keypair from secret
-        working-directory: solana
-        run: printf '%s' "$DEVNET_KEYPAIR" > ci-keypair.json
+      - name: Write oracle keypair from secret
+        working-directory: protocol
+        run: printf '%s' "$DEVNET_KEYPAIR" > oracle-key.json
         env:
           DEVNET_KEYPAIR: ${{ secrets.DEVNET_KEYPAIR }}
 
-      - name: Run claims oracle
-        working-directory: solana
-        run: node process-claims.js --pay
+      - name: Settle claims
+        working-directory: protocol
+        run: node scripts/oracle.js
         env:
-          KEYPAIR_PATH: ci-keypair.json
-          RPC_URL: ${{ secrets.RPC_URL }}
+          KEYPAIR_PATH: oracle-key.json
           AVIATIONSTACK_KEY: ${{ secrets.AVIATIONSTACK_KEY }}
