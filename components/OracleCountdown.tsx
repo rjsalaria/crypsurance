@@ -2,15 +2,14 @@
 
 import { useEffect, useState } from "react";
 
-// The oracle is scheduled every 30 minutes. Note that GitHub Actions treats
+// Scheduled every 30 minutes. Note that GitHub Actions treats
 // cron as best-effort: runs are routinely delayed and low-activity repos get
 // scheduled runs skipped entirely, so the real gap between runs is often
 // longer. The countdown therefore shows the next *scheduled* slot, and the
 // telemetry shows when the oracle actually last ran.
 const WINDOW_MS = 30 * 60 * 1000;
-// The oracle's own heartbeat, written each run. Preferred over GitHub's API:
-// no rate limit, and it reflects the scheduler that actually runs the oracle.
-const STATUS_API = "https://crypsurance-faucet.surety.workers.dev/oracle-status";
+// The oracle runs as a GitHub Action, so its run log is the authoritative
+// record of when it last executed.
 const RUNS_API =
   "https://api.github.com/repos/rjsalaria/crypsurance/actions/workflows/oracle.yml/runs?per_page=1&status=success";
 
@@ -39,21 +38,6 @@ function useLastRun(now: number) {
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
-      // 1) the oracle's own heartbeat
-      try {
-        const res = await fetch(STATUS_API);
-        if (res.ok) {
-          const data = await res.json();
-          if (!cancelled && typeof data?.at === "number") {
-            setStartedAt(data.at);
-            setFailed(false);
-            return;
-          }
-        }
-      } catch {
-        /* fall through to the workflow API */
-      }
-      // 2) fallback: the GitHub workflow run log
       try {
         const res = await fetch(RUNS_API, {
           headers: { Accept: "application/vnd.github+json" },
@@ -179,10 +163,11 @@ export default function OracleCountdown() {
             The oracle never sleeps.
           </h2>
           <p className="mt-2 text-sm text-muted max-w-lg leading-relaxed">
-            A scheduled agent wakes every 30 minutes, pulls the latest event
-            data, and settles every pending claim on-chain — pay, deny, or
-            escalate to human verification. No one has to press a button, and
-            the timestamp below is the real last run, not a promise.
+            A scheduled agent wakes on its own, pulls the latest event data, and
+            settles every pending claim on-chain — pay, deny, or escalate to
+            human verification. It is scheduled every 30 minutes, but the runner
+            queues jobs on a best-effort basis, so the timestamp below is the
+            real last run rather than a promise.
           </p>
 
           <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-3 text-sm max-w-md">
