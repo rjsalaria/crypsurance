@@ -23,6 +23,7 @@ import {
   SystemProgram,
   TransactionInstruction,
 } from "@solana/web3.js";
+import { withRetry } from "./chainClient";
 
 export const PROGRAM_ID = new PublicKey(
   "4V7SWWpKRqFF5QZhPYKBMxHeEag3g2Cr1mhbtaSUjtdr"
@@ -236,12 +237,34 @@ export async function fetchPolicies(
   connection: Connection,
   holder: PublicKey
 ): Promise<OnChainPolicy[]> {
-  const accounts = await connection.getProgramAccounts(PROGRAM_ID, {
-    filters: [
-      { memcmp: { offset: 0, bytes: bs58FromBytes(POLICY_DISCRIMINATOR) } },
-      { memcmp: { offset: 40, bytes: holder.toBase58() } },
-    ],
-  });
+  const accounts = await withRetry(() =>
+    connection.getProgramAccounts(PROGRAM_ID, {
+      filters: [
+        { memcmp: { offset: 0, bytes: bs58FromBytes(POLICY_DISCRIMINATOR) } },
+        { memcmp: { offset: 40, bytes: holder.toBase58() } },
+      ],
+    })
+  );
+  return accounts
+    .map((a) => decodePolicy(new Uint8Array(a.account.data), a.pubkey))
+    .filter((p): p is OnChainPolicy => p !== null)
+    .sort((a, b) => b.createdAt - a.createdAt);
+}
+
+/**
+ * Every policy the program holds, for public views (protocol stats, the
+ * verifier console). Filtered to Policy accounts server-side.
+ */
+export async function fetchAllPolicies(
+  connection: Connection
+): Promise<OnChainPolicy[]> {
+  const accounts = await withRetry(() =>
+    connection.getProgramAccounts(PROGRAM_ID, {
+      filters: [
+        { memcmp: { offset: 0, bytes: bs58FromBytes(POLICY_DISCRIMINATOR) } },
+      ],
+    })
+  );
   return accounts
     .map((a) => decodePolicy(new Uint8Array(a.account.data), a.pubkey))
     .filter((p): p is OnChainPolicy => p !== null)

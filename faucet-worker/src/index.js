@@ -43,7 +43,12 @@ function corsHeaders(origin) {
   return {
     "Access-Control-Allow-Origin": allow,
     "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    // web3.js attaches a `solana-client` header to EVERY RPC call. Omitting it
+    // here fails the preflight, so the dApp's proxied calls all died in the
+    // browser and fell back to the public RPC — invisibly, because the
+    // fallback works. Keep this list in step with what the client sends.
+    "Access-Control-Allow-Headers": "Content-Type, solana-client",
+    "Access-Control-Max-Age": "86400",
     Vary: "Origin",
   };
 }

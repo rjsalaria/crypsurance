@@ -1,5 +1,11 @@
+/**
+ * Shared devnet plumbing for the dApp: the RPC connection, and the two
+ * wallet-flow helpers that exist because the obvious approach is wrong in a
+ * browser (see each one).
+ */
+
 import { Connection, clusterApiUrl } from "@solana/web3.js";
-import type { Commitment, PublicKey } from "@solana/web3.js";
+import type { Commitment } from "@solana/web3.js";
 
 /**
  * The dApp's RPC endpoint: the project worker, which holds a dedicated RPC key
@@ -10,11 +16,19 @@ export const DEVNET_RPC =
   "https://crypsurance-faucet.surety.workers.dev/rpc";
 
 /**
- * Connection that prefers the worker RPC but transparently falls back to the
- * public devnet endpoint if it's unreachable or rejects a call — so an outage
- * (or a method outside the worker's allowlist) degrades instead of breaking
- * the whole page.
+ * Connection that prefers the worker RPC but falls back to the public devnet
+ * endpoint if it's unreachable or rejects a call — so an outage (or a method
+ * outside the worker's allowlist) degrades instead of breaking the page.
+ *
+ * The fallback is announced once per session. Silent fallback hid a real bug
+ * for weeks: the worker's CORS preflight didn't allow web3.js's `solana-client`
+ * header, so *every* proxied call failed and every visitor was quietly on the
+ * throttled public RPC — the exact thing the proxy exists to prevent. A
+ * fallback that works is indistinguishable from a proxy that works unless it
+ * says something.
  */
+let announcedFallback = false;
+
 export const devnetFetch = async (
   input: RequestInfo | URL,
   init?: RequestInit
@@ -25,6 +39,12 @@ export const devnetFetch = async (
   } catch {
     /* worker unreachable — fall through */
   }
+  if (!announcedFallback) {
+    announcedFallback = true;
+    console.warn(
+      "[crypsurance] RPC proxy unavailable — using the public devnet endpoint, which throttles."
+    );
+  }
   return fetch(clusterApiUrl("devnet"), init);
 };
 
@@ -32,60 +52,15 @@ export function makeDevnetConnection(commitment: Commitment = "confirmed") {
   return new Connection(DEVNET_RPC, { commitment, fetch: devnetFetch });
 }
 
-/** The JSON memos the protocol writes on-chain (policy, claim, settlement). */
-export type ChainMemo = {
-  v?: number;
-  kind?: string;
-  id?: string;
-  policy?: string;
-  holder?: string;
-  flight?: string;
-  date?: string;
-  payout?: number;
-  premium?: number;
-  product?: string;
-  basis?: string;
-  reason?: string;
-};
-
-export type MemoRecord = {
-  memo: ChainMemo;
-  signature: string;
-  blockTime: number | null;
-};
-
 /**
- * Solana returns memos as `"[len] text"`, and concatenates them when a
- * transaction carries several. Our memos are flat JSON objects, so pull each
- * `{...}` out of the string and parse it.
+ * Retry with backoff. The devnet RPC throttles per IP, so a busy moment
+ * shouldn't surface to a visitor as a hard failure — reads are idempotent,
+ * and one retry usually gets through.
  */
-export function parseMemos(raw: string | null | undefined): ChainMemo[] {
-  if (!raw) return [];
-  const out: ChainMemo[] = [];
-  for (const match of raw.matchAll(/\{[^{}]*\}/g)) {
-    try {
-      out.push(JSON.parse(match[0]) as ChainMemo);
-    } catch {
-      /* not one of ours */
-    }
-  }
-  return out;
-}
-
-/**
- * Read an address's memo history using ONLY `getSignaturesForAddress`, which
- * already includes the memo text — so one RPC call replaces dozens of
- * `getParsedTransaction` calls.
- *
- * This matters: the public devnet RPC rate-limits transaction fetches hard.
- * Batched `getParsedTransactions` 429s immediately at any batch size, and
- * sequential fetches cost ~1.2s each (23 transactions took 26s, and adding
- * concurrency made it fail outright). Reading memos off the signature list
- * does the same job in ~1s per address.
- */
-/** Retry with backoff — the public devnet RPC throttles per IP, so a busy
- *  moment shouldn't surface as a hard failure. */
-async function withRetry<T>(fn: () => Promise<T>, attempts = 3): Promise<T> {
+export async function withRetry<T>(
+  fn: () => Promise<T>,
+  attempts = 3
+): Promise<T> {
   let lastError: unknown;
   for (let i = 0; i < attempts; i++) {
     try {
@@ -98,23 +73,6 @@ async function withRetry<T>(fn: () => Promise<T>, attempts = 3): Promise<T> {
     }
   }
   throw lastError;
-}
-
-export async function fetchMemoHistory(
-  connection: Connection,
-  address: PublicKey,
-  limit = 100
-): Promise<MemoRecord[]> {
-  const sigs = await withRetry(() =>
-    connection.getSignaturesForAddress(address, { limit })
-  );
-  const out: MemoRecord[] = [];
-  for (const s of sigs) {
-    for (const memo of parseMemos(s.memo)) {
-      out.push({ memo, signature: s.signature, blockTime: s.blockTime ?? null });
-    }
-  }
-  return out;
 }
 
 /**
@@ -190,19 +148,4 @@ export async function confirmSignature(
     await new Promise((r) => setTimeout(r, 1200));
   }
   return "pending";
-}
-
-/** Merge memo histories, drop duplicates, and order oldest → newest. */
-export function mergeMemoRecords(...lists: MemoRecord[][]): MemoRecord[] {
-  const seen = new Set<string>();
-  const merged: MemoRecord[] = [];
-  for (const list of lists) {
-    for (const r of list) {
-      const key = `${r.signature}:${r.memo.kind ?? ""}:${r.memo.id ?? r.memo.policy ?? ""}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      merged.push(r);
-    }
-  }
-  return merged.sort((a, b) => (a.blockTime ?? 0) - (b.blockTime ?? 0));
 }

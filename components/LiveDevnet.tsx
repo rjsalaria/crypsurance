@@ -24,7 +24,7 @@ import {
   DEVNET_RPC,
   devnetFetch,
   withWalletTimeout,
-} from "./chainMemos";
+} from "./chainClient";
 import { buyCoverIx, fetchPolicies, fileClaimIx, policyPda } from "./protocolClient";
 
 /** The real SURETY devnet mint created by solana/create-token.js. */
