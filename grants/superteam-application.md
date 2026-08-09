@@ -195,8 +195,10 @@ Every step is a public Solana transaction, so this number is independently
 verifiable from the chain rather than self-reported — anyone can audit it,
 including you.
 
-**Baseline today:** 2 wallets have completed the full lifecycle (3 have bought
-cover) — all internal test wallets.
+**Baseline:** 1 external wallet has completed the full lifecycle on the M2
+programs (3 policies, 30,000 SURETY paid out). The count restarted with M2 —
+memo-era policies were a weaker mechanism and are not Policy accounts, so they
+are deliberately not carried over.
 
 **Success:** 250 distinct wallets completing the full lifecycle by the end of
 the 12-week grant, with ≥100 by week 6. Below 50 I would consider the project to
