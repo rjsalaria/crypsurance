@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
-import { Buffer } from "buffer";
 import {
   ConnectionProvider,
   WalletProvider,
@@ -13,16 +12,11 @@ import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
 import { PhantomWalletAdapter } from "@solana/wallet-adapter-phantom";
 import { SolflareWalletAdapter } from "@solana/wallet-adapter-solflare";
 import {
-  clusterApiUrl,
   LAMPORTS_PER_SOL,
   PublicKey,
   Transaction,
-  TransactionInstruction,
 } from "@solana/web3.js";
-import {
-  createTransferInstruction,
-  getAssociatedTokenAddress,
-} from "@solana/spl-token";
+import { getAssociatedTokenAddress } from "@solana/spl-token";
 import "@solana/wallet-adapter-react-ui/styles.css";
 import PolicyCertificate from "./PolicyCertificate";
 import {
@@ -37,15 +31,8 @@ import { buyCoverIx, fetchPolicies, fileClaimIx, policyPda } from "./protocolCli
 const SURETY_MINT = new PublicKey(
   "8wAqKooKyqubCG9nNx2bfcq9TQ9jEJxojyhAMAdfsHn9"
 );
-/** Testnet underwriting pool = the devnet holding wallet. */
-const POOL_WALLET = new PublicKey(
-  "9txXv5nFKu4E9AmykbcLGSRiyxM19C81HJqFmJbsBkxy"
-);
-// Memo v1 — v2 is not currently deployed on devnet
-const MEMO_PROGRAM = new PublicKey(
-  "Memo1UhkJRfHyvLMcVucJwxXeuD728EqVDDwQDxFMNo"
-);
-const DECIMALS = 9n;
+// Shown as a preview only — the program recomputes the premium from the
+// payout, so this cannot be used to underpay.
 const PREMIUM_RATE = 0.024; // travel-delay parametric, 2.4% of payout
 
 const WalletMultiButton = dynamic(
@@ -111,7 +98,7 @@ function useBalances(refreshKey: number) {
 }
 
 /* ------------------------------------------------------------------ */
-/* buy cover (M3 v1 — memo-recorded policy)                           */
+/* buy cover — creates an on-chain Policy account via the program      */
 /* ------------------------------------------------------------------ */
 
 type Purchase = {
@@ -199,16 +186,16 @@ function BuyCover({
     <div className="mt-8 border-t border-muted/15 pt-6">
       <h3 className="font-display text-xl font-bold">
         Buy real cover on devnet{" "}
-        <span className="ml-2 align-middle rounded-full border border-cyan-neon/40 bg-cyan-neon/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-cyan-neon">
-          M3 · v1
+        <span className="ml-2 align-middle rounded-full border border-lime-neon/40 bg-lime-neon/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-lime-neon">
+          M2 · on-chain
         </span>
       </h3>
       <p className="mt-1 text-sm text-muted max-w-xl">
-        Travel-delay parametric cover. Your premium moves real devnet SURETY
-        into the underwriting pool, and your policy terms are written into the
-        transaction itself — permanently on-chain. (v1 records policies as
-        transaction memos; policy accounts and NFT certificates arrive with the
-        M2 programs.)
+        Travel-delay parametric cover. Your policy becomes an account owned by
+        the protocol program, and your premium moves into a vault the program
+        alone controls — no private key can spend it, ours included. The premium
+        is calculated on-chain, and a settled claim always pays the policy&apos;s
+        own holder.
       </p>
 
       {!purchase ? (
@@ -309,8 +296,14 @@ function BuyCover({
             </div>
             <dl className="grid grid-cols-2 gap-x-6 gap-y-3 py-4 text-sm">
               <div>
-                <dt className="text-[10px] uppercase tracking-widest text-muted">Policy ID</dt>
-                <dd className="font-mono text-cyan-neon mt-0.5">{purchase.policyId}</dd>
+                <dt className="text-[10px] uppercase tracking-widest text-muted">Policy account</dt>
+                {/* the full 44-char address overflows into the next column */}
+                <dd
+                  className="font-mono text-cyan-neon mt-0.5"
+                  title={purchase.policyId}
+                >
+                  {shortId(purchase.policyId)}
+                </dd>
               </div>
               <div>
                 <dt className="text-[10px] uppercase tracking-widest text-muted">Product</dt>
@@ -337,7 +330,7 @@ function BuyCover({
               rel="noopener noreferrer"
               className="text-xs text-cyan-neon hover:underline font-mono break-all"
             >
-              View the transaction (and your policy memo) on Solana Explorer →
+              View the purchase transaction on Solana Explorer →
             </a>
             <div className="mt-4">
               <button
@@ -515,6 +508,10 @@ function MyPolicies({
                     <span className={`px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusChip[r.status].cls}`}>
                       {statusChip[r.status].label}
                     </span>
+                    {/* the oracle's recorded reason, so a verdict explains itself */}
+                    {r.basis && (
+                      <p className="mt-1 text-[10px] text-muted max-w-40">{r.basis}</p>
+                    )}
                   </td>
                   <td className="py-3">
                     {r.status === "active" ? (
@@ -525,15 +522,6 @@ function MyPolicies({
                       >
                         {busyId === r.id ? "Sending…" : "Request claim"}
                       </button>
-                    ) : r.status === "paid" && r.paidSig ? (
-                      <a
-                        href={`https://explorer.solana.com/tx/${r.paidSig}?cluster=devnet`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-cyan-neon hover:underline"
-                      >
-                        Payout tx →
-                      </a>
                     ) : r.status === "requested" ? (
                       <span className="text-xs text-muted">Awaiting oracle</span>
                     ) : r.status === "manual" ? (
@@ -541,7 +529,15 @@ function MyPolicies({
                         Verifier Network →
                       </a>
                     ) : (
-                      <span className="text-xs text-muted">Flight was on time</span>
+                      // paid or denied: the policy account itself is the record
+                      <a
+                        href={`https://explorer.solana.com/address/${r.id}?cluster=devnet`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-cyan-neon hover:underline"
+                      >
+                        View on-chain →
+                      </a>
                     )}
                   </td>
                 </tr>
