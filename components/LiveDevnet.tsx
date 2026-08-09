@@ -508,36 +508,54 @@ function MyPolicies({
                     <span className={`px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusChip[r.status].cls}`}>
                       {statusChip[r.status].label}
                     </span>
-                    {/* the oracle's recorded reason, so a verdict explains itself */}
-                    {r.basis && (
-                      <p className="mt-1 text-[10px] text-muted max-w-40">{r.basis}</p>
-                    )}
                   </td>
                   <td className="py-3">
                     {r.status === "active" ? (
-                      <button
-                        onClick={() => requestClaim(r)}
-                        disabled={busyId === r.id}
-                        className="text-xs px-3 py-1.5 rounded-lg border border-cyan-neon/50 text-cyan-neon hover:bg-cyan-neon/10 transition-colors disabled:opacity-50"
-                      >
-                        {busyId === r.id ? "Sending…" : "Request claim"}
-                      </button>
-                    ) : r.status === "requested" ? (
-                      <span className="text-xs text-muted">Awaiting oracle</span>
-                    ) : r.status === "manual" ? (
-                      <a href="https://network.crypsurance.io" className="text-xs text-cyan-neon hover:underline">
-                        Verifier Network →
-                      </a>
+                      <>
+                        <button
+                          onClick={() => requestClaim(r)}
+                          disabled={busyId === r.id}
+                          className="text-xs px-3 py-1.5 rounded-lg border border-cyan-neon/50 text-cyan-neon hover:bg-cyan-neon/10 transition-colors disabled:opacity-50"
+                        >
+                          {busyId === r.id ? "Sending…" : "Request claim"}
+                        </button>
+                        <p className="mt-1.5 text-[11px] text-muted max-w-56 leading-snug">
+                          Covered. File a claim if this flight is delayed 3+ hours.
+                        </p>
+                      </>
                     ) : (
-                      // paid or denied: the policy account itself is the record
-                      <a
-                        href={`https://explorer.solana.com/address/${r.id}?cluster=devnet`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-cyan-neon hover:underline"
-                      >
-                        View on-chain →
-                      </a>
+                      <div className="max-w-56">
+                        <p className="text-[11px] text-muted leading-snug">
+                          {r.status === "requested" &&
+                            "Checking the flight data. The oracle settles this on its next run — usually within 30 minutes."}
+                          {r.status === "manual" &&
+                            "The data couldn't decide it, so it's with human verifiers rather than being guessed."}
+                          {r.status === "paid" &&
+                            `Settled — ${fmt(r.payout)} SURETY was sent to your wallet by the program.`}
+                          {r.status === "denied" &&
+                            "Settled as no payout: the delay didn't reach the 3-hour trigger."}
+                        </p>
+                        {/* the oracle's own recorded reason — the evidence, verbatim */}
+                        {r.basis && (
+                          <p className="mt-1 text-[10px] text-muted/70 font-mono break-words">
+                            {r.basis}
+                          </p>
+                        )}
+                        <a
+                          href={
+                            r.status === "manual"
+                              ? "https://network.crypsurance.io"
+                              : `https://explorer.solana.com/address/${r.id}?cluster=devnet`
+                          }
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-1.5 inline-block text-xs text-cyan-neon hover:underline"
+                        >
+                          {r.status === "manual"
+                            ? "Verifier Network →"
+                            : "Check it on-chain →"}
+                        </a>
+                      </div>
                     )}
                   </td>
                 </tr>
