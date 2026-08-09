@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from "react";
 
-// Scheduled every 30 minutes. Note that GitHub Actions treats
-// cron as best-effort: runs are routinely delayed and low-activity repos get
-// scheduled runs skipped entirely, so the real gap between runs is often
-// longer. The countdown therefore shows the next *scheduled* slot, and the
-// telemetry shows when the oracle actually last ran.
+// Every 30 minutes, triggered by a Cloudflare cron that dispatches the oracle
+// workflow. GitHub's own `schedule` is best-effort — it drifted 6-19 minutes
+// in observed runs — so it is kept only as a backstop and the punctual path is
+// workflow_dispatch. The telemetry still shows the last ACTUAL run rather than
+// the schedule, because a claimed cadence is worth less than a timestamp.
 const WINDOW_MS = 30 * 60 * 1000;
 // The oracle runs as a GitHub Action, so its run log is the authoritative
 // record of when it last executed.
@@ -163,11 +163,11 @@ export default function OracleCountdown() {
             The oracle never sleeps.
           </h2>
           <p className="mt-2 text-sm text-muted max-w-lg leading-relaxed">
-            A scheduled agent wakes on its own, pulls the latest event data, and
-            settles every pending claim on-chain — pay, deny, or escalate to
-            human verification. It is scheduled every 30 minutes, but the runner
-            queues jobs on a best-effort basis, so the timestamp below is the
-            real last run rather than a promise.
+            A scheduled agent wakes every 30 minutes, pulls the latest event
+            data, and settles every pending claim on-chain — pay, deny, or
+            escalate to human verification. No one presses a button, and the
+            timestamp below is the real last run, read from the public log
+            rather than asserted.
           </p>
 
           <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-3 text-sm max-w-md">
