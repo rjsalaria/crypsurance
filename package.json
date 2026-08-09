@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "prebuild": "node scripts/build-id.mjs"
   },
   "dependencies": {
     "@solana/spl-token": "^0.4.15",

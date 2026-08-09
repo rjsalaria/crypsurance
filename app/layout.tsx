@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { Metadata } from "next";
 import { Inter, Space_Grotesk } from "next/font/google";
 import "./globals.css";
@@ -5,6 +7,21 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import ClickRipple from "@/components/ClickRipple";
 import FrameGuard from "@/components/FrameGuard";
+import UpdatePrompt from "@/components/UpdatePrompt";
+
+/**
+ * The build this HTML was generated from. Read at build time and embedded, so
+ * a page can notice when the deployed build has moved on — see UpdatePrompt.
+ */
+function buildId(): string {
+  try {
+    return JSON.parse(
+      readFileSync(join(process.cwd(), "public", "build-id.json"), "utf8")
+    ).id;
+  } catch {
+    return "dev";
+  }
+}
 
 const inter = Inter({
   variable: "--font-inter",
@@ -42,6 +59,7 @@ export const metadata: Metadata = {
   // pipeline is live. Check via view-source on crypsurance.io.
   other: {
     "deploy-check": "autodeploy-verified-2026-07-23",
+    "build-id": buildId(),
   },
 };
 
@@ -58,6 +76,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <FrameGuard />
         <ClickRipple />
+        <UpdatePrompt />
         <Navbar />
         <main className="flex-1">{children}</main>
         <Footer />
