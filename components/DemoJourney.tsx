@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 
 /* ------------------------------------------------------------------ */
 /* demo data + pricing (illustrative testnet model)                    */
@@ -694,9 +695,9 @@ export default function DemoJourney() {
                 <button onClick={restart} className="px-6 py-3 rounded-xl border border-muted/30 font-semibold hover:border-cyan-neon/60 hover:text-cyan-neon transition-colors">
                   ↻ Try another product
                 </button>
-                <a href="/#token" className="btn-gradient px-8 py-3 rounded-xl font-display font-bold text-white">
+                <Link href="/#token" className="btn-gradient px-8 py-3 rounded-xl font-display font-bold text-white">
                   I'm convinced — about SURETY
-                </a>
+                </Link>
               </div>
             </div>
           )}

@@ -72,9 +72,16 @@ leaking the oracle secret also can't be escalated into replacing the program.
 ```bash
 npm install
 npm run dev            # site at http://localhost:3000
+npm test               # client wire-format tests (no network, no toolchain)
+npm run lint
 npm run build          # static export into out/
 npx serve out -l 5050  # preview exactly what gets deployed
 ```
+
+`npm test` checks the browser client's hand-rolled Anchor encoding against the
+way Anchor derives it — discriminators, the Borsh layout, the account offsets,
+the PDAs. That code path otherwise runs only in a browser with a wallet
+attached, which is the awkward place to find out it's wrong.
 
 The Anchor program needs Rust, the Solana CLI and Anchor (on Windows, inside
 WSL):
@@ -82,8 +89,17 @@ WSL):
 ```bash
 cd protocol
 anchor build
-anchor test            # 11 tests, spins up a local validator
+anchor test --provider.cluster localnet   # 11 tests on a throwaway validator
 ```
+
+`--provider.cluster localnet` matters: `Anchor.toml` points at devnet so that
+deploys go to the right place, and without the flag the tests would run against
+the live deployment.
+
+Both suites, plus lint and the static build, run in CI on every push and pull
+request — see [.github/workflows/ci.yml](.github/workflows/ci.yml). CI also
+fails if `protocol/idl/protocol.json` drifts from what `anchor build` produces,
+because that file is what the site and the oracle read.
 
 Useful scripts, all reading live devnet:
 

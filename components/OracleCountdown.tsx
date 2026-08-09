@@ -13,25 +13,34 @@ const WINDOW_MS = 30 * 60 * 1000;
 const RUNS_API =
   "https://api.github.com/repos/rjsalaria/crypsurance/actions/workflows/oracle.yml/runs?per_page=1&status=success";
 
+/**
+ * The clock starts on the client, not at build time.
+ *
+ * This page is a static export: a countdown seeded from Date.now() during
+ * prerender bakes the build machine's clock into the HTML, and hydration then
+ * disagrees with it — React throws #418 and re-renders the subtree. Starting
+ * at null costs one 200ms tick before the first digits appear, and the server
+ * HTML says the only honest thing it can.
+ */
 function useOracleClock() {
-  const [now, setNow] = useState(() => Date.now());
+  const [now, setNow] = useState<number | null>(null);
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 200);
     return () => clearInterval(t);
   }, []);
 
-  const intoWindow = now % WINDOW_MS;
+  const intoWindow = (now ?? 0) % WINDOW_MS;
   const msRemaining = WINDOW_MS - intoWindow;
   const secondsRemaining = msRemaining / 1000;
   const fractionRemaining = msRemaining / WINDOW_MS;
   // the scheduled slot opens at each boundary — show a sync burst just after
-  const syncing = intoWindow < 6000;
+  const syncing = now !== null && intoWindow < 6000;
 
   return { now, secondsRemaining, fractionRemaining, syncing };
 }
 
 /** When the oracle genuinely last completed, straight from the public run log. */
-function useLastRun(now: number) {
+function useLastRun(now: number | null) {
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -62,7 +71,8 @@ function useLastRun(now: number) {
     };
   }, []);
 
-  if (startedAt === null) return { label: failed ? "—" : "checking…" };
+  if (startedAt === null || now === null)
+    return { label: failed ? "—" : "checking…" };
 
   const mins = Math.max(0, Math.round((now - startedAt) / 60000));
   if (mins < 1) return { label: "just now" };
@@ -76,8 +86,8 @@ const pad = (n: number) => String(Math.floor(n)).padStart(2, "0");
 export default function OracleCountdown() {
   const { now, secondsRemaining, fractionRemaining, syncing } = useOracleClock();
   const lastRun = useLastRun(now);
-  const mm = pad(secondsRemaining / 60);
-  const ss = pad(secondsRemaining % 60);
+  const mm = now === null ? "--" : pad(secondsRemaining / 60);
+  const ss = now === null ? "--" : pad(secondsRemaining % 60);
 
   const R = 92;
   const C = 2 * Math.PI * R;

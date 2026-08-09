@@ -53,29 +53,6 @@ export function makeDevnetConnection(commitment: Commitment = "confirmed") {
 }
 
 /**
- * Retry with backoff. The devnet RPC throttles per IP, so a busy moment
- * shouldn't surface to a visitor as a hard failure — reads are idempotent,
- * and one retry usually gets through.
- */
-export async function withRetry<T>(
-  fn: () => Promise<T>,
-  attempts = 3
-): Promise<T> {
-  let lastError: unknown;
-  for (let i = 0; i < attempts; i++) {
-    try {
-      return await fn();
-    } catch (e) {
-      lastError = e;
-      if (i < attempts - 1) {
-        await new Promise((r) => setTimeout(r, 500 * 2 ** i)); // 0.5s, 1s
-      }
-    }
-  }
-  throw lastError;
-}
-
-/**
  * Bound how long we wait on a wallet prompt.
  *
  * If the popup is dismissed or never noticed, the adapter's promise can hang

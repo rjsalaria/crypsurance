@@ -67,6 +67,10 @@ export default function VerificationConsole() {
   }, [connection]);
 
   useEffect(() => {
+    // scan() sets its "scanning" flag before awaiting the RPC — that render is
+    // what puts the console into its loading state instead of showing an
+    // empty table while the chain is read.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     scan();
   }, [scan]);
 

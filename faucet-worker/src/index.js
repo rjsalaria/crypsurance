@@ -356,6 +356,8 @@ async function handleRpc(request, env, origin) {
   });
 }
 
+// The Workers runtime requires the handlers as an anonymous default export.
+// eslint-disable-next-line import/no-anonymous-default-export
 export default {
   async fetch(request, env) {
     const origin = request.headers.get("Origin");

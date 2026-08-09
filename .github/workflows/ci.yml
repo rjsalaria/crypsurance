@@ -1,0 +1,120 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch: {}
+
+# Nothing here writes anywhere. Deployment is a separate workflow.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Fast feedback: lint, wire-format tests, and the static export.
+  web:
+    name: Site and client
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      # Checks the hand-rolled Anchor encoding against how Anchor derives it.
+      # Cheap, and it covers the one code path that otherwise can only be
+      # exercised in a browser with a wallet attached.
+      - name: Client wire-format tests
+        run: npm test
+
+      - name: Build static export
+        run: npm run build
+
+  # The program's own tests, against a local validator. These are the security
+  # tests — that the oracle cannot redirect a payout, that only the holder can
+  # claim, that premiums are computed on-chain — so they gate merges even
+  # though the toolchain takes a while to install.
+  program:
+    name: Anchor program
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: protocol
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Versions pinned to the ones the program is developed and deployed
+      # with. Floating these has broken Anchor builds before; a green CI on a
+      # toolchain nobody uses proves nothing.
+      - name: Cache Rust
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin
+            ~/.cargo/registry
+            ~/.cargo/git
+            protocol/target
+          key: rust-anchor0.32.1-${{ hashFiles('protocol/Cargo.lock') }}
+          restore-keys: rust-anchor0.32.1-
+
+      - name: Cache Solana toolchain
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/solana
+          key: solana-3.0.11
+
+      - name: Install Solana CLI
+        run: |
+          if [ ! -x "$HOME/.local/share/solana/install/active_release/bin/solana" ]; then
+            sh -c "$(curl -sSfL https://release.anza.xyz/v3.0.11/install)"
+          fi
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
+
+      # Built from the repo root on purpose: protocol/rust-toolchain.toml pins
+      # rustc 1.89 for the program, and the CLI wants a newer compiler.
+      - name: Install Anchor CLI
+        working-directory: ${{ github.workspace }}
+        run: |
+          if ! command -v anchor >/dev/null; then
+            cargo install --locked anchor-cli@0.32.1
+          fi
+
+      # anchor test needs a payer keypair; a throwaway one is correct here —
+      # everything runs against a local validator that this job starts and
+      # discards. No project key ever touches CI.
+      - name: Create a local validator keypair
+        run: solana-keygen new --no-bip39-passphrase --silent --force -o ~/.config/solana/id.json
+
+      - run: npm install
+
+      # --provider.cluster localnet is not optional: Anchor.toml points at
+      # devnet for deploys, and `anchor test` would otherwise run against the
+      # live deployment instead of a throwaway validator.
+      - name: anchor test
+        run: anchor test --provider.cluster localnet
+
+      # The committed IDL is what the site and the oracle read. If a build
+      # changes it, the commit must carry the new one. Compared as normalized
+      # JSON so key order and whitespace don't fail the build on their own.
+      - name: Committed IDL matches the built program
+        run: |
+          if ! diff <(jq -S . idl/protocol.json) <(jq -S . target/idl/protocol.json); then
+            echo "::error::idl/protocol.json is stale. Run anchor build and copy target/idl/protocol.json into idl/."
+            exit 1
+          fi

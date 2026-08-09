@@ -23,7 +23,6 @@ import {
   SystemProgram,
   TransactionInstruction,
 } from "@solana/web3.js";
-import { withRetry } from "./chainClient";
 
 export const PROGRAM_ID = new PublicKey(
   "4V7SWWpKRqFF5QZhPYKBMxHeEag3g2Cr1mhbtaSUjtdr"
@@ -85,6 +84,26 @@ function concat(parts: Uint8Array[]): Buffer {
 function borshString(s: string): Uint8Array {
   const bytes = new TextEncoder().encode(s);
   return concat([u32le(bytes.length), bytes]);
+}
+
+/**
+ * Retry with backoff. The devnet RPC throttles per IP, so a busy moment
+ * shouldn't surface to a visitor as a hard failure — these reads are
+ * idempotent, and one retry usually gets through.
+ */
+async function withRetry<T>(fn: () => Promise<T>, attempts = 3): Promise<T> {
+  let lastError: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastError = e;
+      if (i < attempts - 1) {
+        await new Promise((r) => setTimeout(r, 500 * 2 ** i)); // 0.5s, 1s
+      }
+    }
+  }
+  throw lastError;
 }
 
 /* ---------------------------------------------------------------- */
@@ -271,8 +290,12 @@ export async function fetchAllPolicies(
     .sort((a, b) => b.createdAt - a.createdAt);
 }
 
-/** base58 for a short byte array (memcmp filters take base58, not base64). */
-function bs58FromBytes(bytes: number[]): string {
+/**
+ * base58 for a short byte array (memcmp filters take base58, not base64).
+ * Exported so the tests can check it against a reference encoder — a wrong
+ * filter doesn't error, it just returns no accounts.
+ */
+export function bs58FromBytes(bytes: number[]): string {
   const ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
   let n = 0n;
   for (const b of bytes) n = (n << 8n) | BigInt(b);

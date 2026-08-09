@@ -57,12 +57,13 @@ function useBalances(refreshKey: number) {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!publicKey) {
-      setSol(null);
-      setSurety(null);
-      return;
-    }
+    // No wallet, nothing to read. Disconnecting is handled where these are
+    // returned — clearing state here would just queue an extra render.
+    if (!publicKey) return;
     let cancelled = false;
+    // The one render this costs is the point: it's what shows the spinner
+    // before the RPC round-trip, which on devnet is not fast.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     (async () => {
       try {
@@ -94,7 +95,12 @@ function useBalances(refreshKey: number) {
     };
   }, [publicKey, connection, refreshKey]);
 
-  return { sol, surety, loading };
+  // A disconnected wallet has no balances, rather than the last one's.
+  return {
+    sol: publicKey ? sol : null,
+    surety: publicKey ? surety : null,
+    loading,
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -418,8 +424,11 @@ function MyPolicies({
   }, [publicKey, connection]);
 
   useEffect(() => {
+    // Nothing to scan while disconnected, and nothing to clear either: the
+    // whole section renders null in that state (see the guard below).
+    // scan() raises its own "scanning" flag first, hence the exemption.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (connected) scan();
-    else setRows(null);
   }, [connected, refreshKey, scan]);
 
   const requestClaim = useCallback(
