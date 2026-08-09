@@ -6,10 +6,17 @@
  * instructions and one account layout, and the Anchor runtime would add a
  * large dependency to every page load for no benefit.
  *
+ * All 64-bit reads and writes go through DataView rather than Buffer's
+ * writeBigUInt64LE / readBigUInt64LE. Those exist in Node but NOT in the
+ * Buffer polyfill browsers get, so using them fails at runtime with
+ * "writeBigUInt64LE is not a function" — in the wallet flow specifically,
+ * which is the one path that cannot be exercised outside a browser.
+ *
  * Discriminators are sha256("global:<ix>")[0..8] / sha256("account:<Name>")[0..8],
  * precomputed. Regenerate if an instruction is renamed.
  */
 
+import { Buffer } from "buffer";
 import {
   Connection,
   PublicKey,
@@ -46,6 +53,43 @@ export type OnChainPolicy = {
   basis: string;
 };
 
+/* ---------------------------------------------------------------- */
+/* little-endian primitives (DataView — works in every runtime)      */
+/* ---------------------------------------------------------------- */
+
+function u64le(value: bigint): Uint8Array {
+  const out = new Uint8Array(8);
+  new DataView(out.buffer).setBigUint64(0, value, true);
+  return out;
+}
+
+function u32le(value: number): Uint8Array {
+  const out = new Uint8Array(4);
+  new DataView(out.buffer).setUint32(0, value, true);
+  return out;
+}
+
+function concat(parts: Uint8Array[]): Buffer {
+  const total = parts.reduce((n, p) => n + p.length, 0);
+  const out = new Uint8Array(total);
+  let o = 0;
+  for (const p of parts) {
+    out.set(p, o);
+    o += p.length;
+  }
+  return Buffer.from(out);
+}
+
+/** Borsh string: u32 little-endian length, then UTF-8 bytes. */
+function borshString(s: string): Uint8Array {
+  const bytes = new TextEncoder().encode(s);
+  return concat([u32le(bytes.length), bytes]);
+}
+
+/* ---------------------------------------------------------------- */
+/* addresses                                                         */
+/* ---------------------------------------------------------------- */
+
 export function poolPda(): PublicKey {
   return PublicKey.findProgramAddressSync([Buffer.from("pool")], PROGRAM_ID)[0];
 }
@@ -56,30 +100,15 @@ export function vaultPda(pool: PublicKey): PublicKey {
   )[0];
 }
 export function policyPda(holder: PublicKey, nonce: bigint): PublicKey {
-  const n = Buffer.alloc(8);
-  n.writeBigUInt64LE(nonce);
   return PublicKey.findProgramAddressSync(
-    [Buffer.from("policy"), holder.toBuffer(), n],
+    [Buffer.from("policy"), holder.toBuffer(), Buffer.from(u64le(nonce))],
     PROGRAM_ID
   )[0];
 }
 
 /* ---------------------------------------------------------------- */
-/* encoding                                                          */
+/* instructions                                                      */
 /* ---------------------------------------------------------------- */
-
-function borshString(s: string): Buffer {
-  const bytes = Buffer.from(s, "utf8");
-  const len = Buffer.alloc(4);
-  len.writeUInt32LE(bytes.length);
-  return Buffer.concat([len, bytes]);
-}
-
-function u64(n: bigint): Buffer {
-  const b = Buffer.alloc(8);
-  b.writeBigUInt64LE(n);
-  return b;
-}
 
 export function buyCoverIx(params: {
   holder: PublicKey;
@@ -104,12 +133,12 @@ export function buyCoverIx(params: {
       { pubkey: TOKEN_PROGRAM, isSigner: false, isWritable: false },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     ],
-    data: Buffer.concat([
-      Buffer.from(IX_BUY_COVER),
-      u64(params.nonce),
+    data: concat([
+      Uint8Array.from(IX_BUY_COVER),
+      u64le(params.nonce),
       borshString(params.flight),
       borshString(params.date),
-      u64(BigInt(params.payout)),
+      u64le(BigInt(params.payout)),
     ]),
   });
 }
@@ -124,7 +153,7 @@ export function fileClaimIx(
       { pubkey: holder, isSigner: true, isWritable: false },
       { pubkey: policy, isSigner: false, isWritable: true },
     ],
-    data: Buffer.from(IX_FILE_CLAIM),
+    data: Buffer.from(Uint8Array.from(IX_FILE_CLAIM)),
   });
 }
 
@@ -138,32 +167,35 @@ export function fileClaimIx(
  *   | premium u64 | status u8 | created_at i64 | settled_at i64 | basis str | bump u8
  */
 export function decodePolicy(
-  data: Buffer,
+  data: Uint8Array,
   address: PublicKey
 ): OnChainPolicy | null {
   for (let i = 0; i < 8; i++) {
     if (data[i] !== POLICY_DISCRIMINATOR[i]) return null;
   }
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  const decoder = new TextDecoder();
   let o = 8;
+
   const key = () => {
     const k = new PublicKey(data.subarray(o, o + 32));
     o += 32;
     return k;
   };
   const readU64 = () => {
-    const v = data.readBigUInt64LE(o);
+    const v = view.getBigUint64(o, true);
     o += 8;
     return v;
   };
   const readI64 = () => {
-    const v = data.readBigInt64LE(o);
+    const v = view.getBigInt64(o, true);
     o += 8;
     return v;
   };
   const readStr = () => {
-    const len = data.readUInt32LE(o);
+    const len = view.getUint32(o, true);
     o += 4;
-    const s = data.subarray(o, o + len).toString("utf8");
+    const s = decoder.decode(data.subarray(o, o + len));
     o += len;
     return s;
   };
@@ -211,7 +243,7 @@ export async function fetchPolicies(
     ],
   });
   return accounts
-    .map((a) => decodePolicy(Buffer.from(a.account.data), a.pubkey))
+    .map((a) => decodePolicy(new Uint8Array(a.account.data), a.pubkey))
     .filter((p): p is OnChainPolicy => p !== null)
     .sort((a, b) => b.createdAt - a.createdAt);
 }
