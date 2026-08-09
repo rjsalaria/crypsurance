@@ -15,10 +15,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Same version as CI and as local development. `npm install` here is
+      # tolerant enough to run on npm 10, but it would then resolve a different
+      # tree than the one CI checked, which defeats the point of checking it.
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
 
       - name: Install dependencies
         run: npm install
