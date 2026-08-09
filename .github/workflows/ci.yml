@@ -27,7 +27,20 @@ jobs:
           node-version: 22
           cache: npm
 
-      - run: npm ci
+      # Failure output is echoed as a GitHub annotation, not just into the log:
+      # workflow logs need repo-admin auth to read, and an install that fails
+      # for an unreadable reason is a CI that nobody can fix.
+      - name: Install dependencies
+        run: |
+          set +e
+          npm ci > npm-ci.log 2>&1
+          code=$?
+          set -e
+          if [ $code -ne 0 ]; then
+            echo "::error::npm ci failed (exit $code): $(tail -c 1200 npm-ci.log | tr '\n' ' ')"
+            cat npm-ci.log
+            exit $code
+          fi
 
       - name: Lint
         run: npm run lint
@@ -58,6 +71,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+
+      # anchor-cli builds solana crates whose build scripts link against system
+      # libraries. The runner image doesn't carry libudev or the OpenSSL
+      # headers, and without them cargo aborts early in the build.
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq pkg-config build-essential libudev-dev libssl-dev
 
       # Versions pinned to the ones the program is developed and deployed
       # with. Floating these has broken Anchor builds before; a green CI on a
@@ -91,8 +112,15 @@ jobs:
       - name: Install Anchor CLI
         working-directory: ${{ github.workspace }}
         run: |
-          if ! command -v anchor >/dev/null; then
-            cargo install --locked anchor-cli@0.32.1
+          if command -v anchor >/dev/null; then exit 0; fi
+          set +e
+          cargo install --locked anchor-cli@0.32.1 > anchor-install.log 2>&1
+          code=$?
+          set -e
+          if [ $code -ne 0 ]; then
+            echo "::error::anchor-cli install failed (exit $code): $(grep -i -m3 '^error' anchor-install.log | tr '\n' ' ')"
+            tail -80 anchor-install.log
+            exit $code
           fi
 
       # anchor test needs a payer keypair; a throwaway one is correct here —
