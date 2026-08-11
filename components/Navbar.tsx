@@ -4,11 +4,17 @@ import { useState } from "react";
 import Link from "next/link";
 import Logo from "./Logo";
 
+/**
+ * `live` marks the link to the running protocol — it gets the lime glow and a
+ * pulsing dot. Keyed on the flag rather than the label, because matching on
+ * display text meant renaming "Testnet" to "Devnet" silently dropped the
+ * styling with nothing failing.
+ */
 const links = [
   { href: "/", label: "Home" },
   { href: "/learn", label: "Learn" },
   { href: "/app", label: "Demo" },
-  { href: "/devnet", label: "Devnet" },
+  { href: "/devnet", label: "Devnet", live: true },
   { href: "/#token", label: "SURETY Token" },
   { href: "/#faq", label: "FAQ" },
 ];
@@ -29,7 +35,7 @@ export default function Navbar() {
 
           <div className="hidden md:flex items-center gap-7 text-sm text-muted">
             {links.map((l) =>
-              l.label === "Testnet" ? (
+              l.live ? (
                 <Link
                   key={l.href}
                   href={l.href}
@@ -99,7 +105,7 @@ export default function Navbar() {
         {open && (
           <div className="md:hidden glass-card mt-2 px-5 py-4 flex flex-col gap-4 text-sm">
             {links.map((l) =>
-              l.label === "Testnet" ? (
+              l.live ? (
                 <Link
                   key={l.href}
                   href={l.href}

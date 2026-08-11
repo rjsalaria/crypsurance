@@ -310,7 +310,7 @@ header .glass-card {
   animation-duration: 0.75s;
 }
 
-/* ---------- live nav link (testnet) ---------- */
+/* ---------- live nav link (devnet) ---------- */
 
 @keyframes nav-live-glow {
   0%,
