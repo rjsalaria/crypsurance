@@ -255,7 +255,14 @@ const RPC_METHODS = new Set([
 /** The CrypSurance protocol program — the only program getProgramAccounts may target. */
 const PROTOCOL_PROGRAM_ID = "4V7SWWpKRqFF5QZhPYKBMxHeEag3g2Cr1mhbtaSUjtdr";
 
-/** Helius doesn't serve getProgramAccounts, so it goes here. */
+/**
+ * Helius doesn't serve getProgramAccounts, so it would have to go here — but
+ * the public endpoint answers Cloudflare's egress IPs with 403 "Your IP or
+ * provider is blocked", so this path cannot currently succeed from a Worker.
+ * The dApp therefore calls getProgramAccounts directly from the browser (see
+ * UNPROXYABLE in components/chainClient.ts). Kept wired up so that pointing
+ * this at an upstream that does serve it is a one-line change.
+ */
 const GPA_RPC = "https://api.devnet.solana.com";
 
 /* ------------------------------------------------------------------ */

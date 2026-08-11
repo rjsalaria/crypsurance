@@ -29,21 +29,51 @@ export const DEVNET_RPC =
  */
 let announcedFallback = false;
 
+/**
+ * Methods that cannot go through the worker, and are sent straight to the
+ * public endpoint instead of failing there first.
+ *
+ * getProgramAccounts has nowhere to be proxied to: our paid RPC doesn't serve
+ * it, and Solana's public devnet RPC answers Cloudflare's egress IPs with
+ * "Your IP or provider is blocked from this endpoint". Routing it through the
+ * worker anyway costs a guaranteed-403 round-trip on every policy read and
+ * makes the fallback warning below cry wolf. Remove a method from here as soon
+ * as an upstream can actually serve it.
+ */
+const UNPROXYABLE = new Set(["getProgramAccounts"]);
+
+/** JSON-RPC method names in a request body (an array = a batch). */
+function methodsIn(init?: RequestInit): string[] {
+  try {
+    if (typeof init?.body !== "string") return [];
+    const body = JSON.parse(init.body);
+    return (Array.isArray(body) ? body : [body])
+      .map((c) => c?.method)
+      .filter((m): m is string => typeof m === "string");
+  } catch {
+    return [];
+  }
+}
+
 export const devnetFetch = async (
   input: RequestInfo | URL,
   init?: RequestInit
 ): Promise<Response> => {
-  try {
-    const res = await fetch(input, init);
-    if (res.ok) return res;
-  } catch {
-    /* worker unreachable — fall through */
-  }
-  if (!announcedFallback) {
-    announcedFallback = true;
-    console.warn(
-      "[crypsurance] RPC proxy unavailable — using the public devnet endpoint, which throttles."
-    );
+  const direct = methodsIn(init).some((m) => UNPROXYABLE.has(m));
+
+  if (!direct) {
+    try {
+      const res = await fetch(input, init);
+      if (res.ok) return res;
+    } catch {
+      /* worker unreachable — fall through */
+    }
+    if (!announcedFallback) {
+      announcedFallback = true;
+      console.warn(
+        "[crypsurance] RPC proxy unavailable — using the public devnet endpoint, which throttles."
+      );
+    }
   }
   return fetch(clusterApiUrl("devnet"), init);
 };
