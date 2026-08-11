@@ -67,6 +67,131 @@ pub mod protocol {
         Ok(())
     }
 
+    /* -------------------------------------------------------------- */
+    /* M3: the operator registry                                       */
+    /* -------------------------------------------------------------- */
+
+    /// Create the operator registry and its stake vault.
+    ///
+    /// The registry is a separate account rather than extra fields on `Pool`
+    /// on purpose: the pool is already live on devnet holding policy counters
+    /// and a funded vault, and growing a money-holding account in place is a
+    /// migration, not a feature. Everything M3 adds is additive, so M2's
+    /// tested paths keep working untouched while consensus is built beside
+    /// them.
+    pub fn initialize_registry(
+        ctx: Context<InitializeRegistry>,
+        threshold: u8,
+        min_stake: u64,
+    ) -> Result<()> {
+        require!(threshold >= 1, CoverError::BadThreshold);
+
+        let registry = &mut ctx.accounts.registry;
+        registry.pool = ctx.accounts.pool.key();
+        registry.authority = ctx.accounts.authority.key();
+        registry.threshold = threshold;
+        registry.min_stake = min_stake;
+        registry.operator_count = 0;
+        registry.bump = ctx.bumps.registry;
+        registry.stake_vault_bump = ctx.bumps.stake_vault;
+        Ok(())
+    }
+
+    /// Change how many agreeing attestations settle a claim (admin only).
+    pub fn set_threshold(ctx: Context<SetThreshold>, threshold: u8) -> Result<()> {
+        require!(threshold >= 1, CoverError::BadThreshold);
+        ctx.accounts.registry.threshold = threshold;
+        Ok(())
+    }
+
+    /// Join the operator set by staking SURETY.
+    ///
+    /// Registration is permissionless — that is the whole point of the
+    /// milestone. What keeps it honest is the stake: it sits in a vault owned
+    /// by the pool PDA, on the same terms as premiums, and week 3 makes it
+    /// slashable when an operator's attestation disagrees with the outcome.
+    pub fn register_operator(ctx: Context<RegisterOperator>, stake: u64) -> Result<()> {
+        require!(
+            stake >= ctx.accounts.registry.min_stake,
+            CoverError::StakeBelowMinimum
+        );
+
+        let stake_base = to_base_units(stake, ctx.accounts.pool.decimals)?;
+        token::transfer(
+            CpiContext::new(
+                ctx.accounts.token_program.to_account_info(),
+                Transfer {
+                    from: ctx.accounts.operator_token.to_account_info(),
+                    to: ctx.accounts.stake_vault.to_account_info(),
+                    authority: ctx.accounts.authority.to_account_info(),
+                },
+            ),
+            stake_base,
+        )?;
+
+        let operator = &mut ctx.accounts.operator;
+        operator.pool = ctx.accounts.pool.key();
+        operator.authority = ctx.accounts.authority.key();
+        operator.stake = stake;
+        operator.attestations = 0;
+        operator.agreed = 0;
+        operator.pending = 0;
+        operator.active = true;
+        operator.registered_at = Clock::get()?.unix_timestamp;
+        operator.bump = ctx.bumps.operator;
+
+        let registry = &mut ctx.accounts.registry;
+        registry.operator_count = registry.operator_count.saturating_add(1);
+
+        emit!(OperatorRegistered {
+            operator: operator.key(),
+            authority: operator.authority,
+            stake,
+        });
+        Ok(())
+    }
+
+    /// Leave the operator set and take the stake back.
+    ///
+    /// Refused while the operator has attestations on claims that haven't
+    /// settled yet — otherwise an operator could vote, see the verdict going
+    /// against them, and withdraw before week 3's slashing could reach the
+    /// stake.
+    pub fn deregister_operator(ctx: Context<DeregisterOperator>) -> Result<()> {
+        require!(
+            ctx.accounts.operator.pending == 0,
+            CoverError::OperatorHasPendingAttestations
+        );
+
+        let stake = ctx.accounts.operator.stake;
+        if stake > 0 {
+            let stake_base = to_base_units(stake, ctx.accounts.pool.decimals)?;
+            let pool_bump = ctx.accounts.pool.bump;
+            let seeds: &[&[u8]] = &[b"pool", core::slice::from_ref(&pool_bump)];
+            token::transfer(
+                CpiContext::new_with_signer(
+                    ctx.accounts.token_program.to_account_info(),
+                    Transfer {
+                        from: ctx.accounts.stake_vault.to_account_info(),
+                        to: ctx.accounts.operator_token.to_account_info(),
+                        authority: ctx.accounts.pool.to_account_info(),
+                    },
+                    &[seeds],
+                ),
+                stake_base,
+            )?;
+        }
+
+        let registry = &mut ctx.accounts.registry;
+        registry.operator_count = registry.operator_count.saturating_sub(1);
+
+        emit!(OperatorDeregistered {
+            authority: ctx.accounts.operator.authority,
+            stake,
+        });
+        Ok(())
+    }
+
     /// Buy cover. The premium is derived from the payout here rather than
     /// taken from the caller, so it cannot be understated.
     pub fn buy_cover(
@@ -261,6 +386,43 @@ pub struct Pool {
     pub vault_bump: u8,
 }
 
+/// Consensus configuration and the operator roll-call.
+///
+/// Deliberately separate from `Pool` — see `initialize_registry`.
+#[account]
+#[derive(InitSpace)]
+pub struct Registry {
+    pub pool: Pubkey,
+    pub authority: Pubkey,
+    /// Agreeing attestations required to settle a claim.
+    pub threshold: u8,
+    /// Whole tokens an operator must stake to join.
+    pub min_stake: u64,
+    pub operator_count: u16,
+    pub bump: u8,
+    pub stake_vault_bump: u8,
+}
+
+/// One registered claim verifier.
+///
+/// `attestations` / `agreed` are a public track record: an operator that keeps
+/// disagreeing with settled outcomes is visible before it is ever slashed.
+#[account]
+#[derive(InitSpace)]
+pub struct Operator {
+    pub pool: Pubkey,
+    pub authority: Pubkey,
+    /// Whole tokens, like payouts and premiums everywhere else.
+    pub stake: u64,
+    pub attestations: u64,
+    pub agreed: u64,
+    /// Attestations on claims that haven't settled yet. Blocks withdrawal.
+    pub pending: u32,
+    pub active: bool,
+    pub registered_at: i64,
+    pub bump: u8,
+}
+
 #[account]
 #[derive(InitSpace)]
 pub struct Policy {
@@ -329,6 +491,141 @@ pub struct SetOracle<'info> {
     #[account(mut, seeds = [b"pool"], bump = pool.bump, has_one = authority)]
     pub pool: Account<'info, Pool>,
     pub authority: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct InitializeRegistry<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    #[account(seeds = [b"pool"], bump = pool.bump, has_one = authority)]
+    pub pool: Account<'info, Pool>,
+
+    #[account(
+        init,
+        payer = authority,
+        space = 8 + Registry::INIT_SPACE,
+        seeds = [b"registry", pool.key().as_ref()],
+        bump
+    )]
+    pub registry: Account<'info, Registry>,
+
+    /// Stake sits under the same PDA authority as premiums do.
+    #[account(
+        init,
+        payer = authority,
+        seeds = [b"stake_vault", pool.key().as_ref()],
+        bump,
+        token::mint = mint,
+        token::authority = pool,
+    )]
+    pub stake_vault: Account<'info, TokenAccount>,
+
+    #[account(constraint = mint.key() == pool.mint @ CoverError::WrongMint)]
+    pub mint: Account<'info, Mint>,
+    pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
+    pub rent: Sysvar<'info, Rent>,
+}
+
+#[derive(Accounts)]
+pub struct SetThreshold<'info> {
+    #[account(
+        mut,
+        seeds = [b"registry", registry.pool.as_ref()],
+        bump = registry.bump,
+        has_one = authority
+    )]
+    pub registry: Account<'info, Registry>,
+    pub authority: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct RegisterOperator<'info> {
+    /// Anyone may register — the stake is the gate, not a permission list.
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    #[account(seeds = [b"pool"], bump = pool.bump)]
+    pub pool: Account<'info, Pool>,
+
+    #[account(
+        mut,
+        seeds = [b"registry", pool.key().as_ref()],
+        bump = registry.bump
+    )]
+    pub registry: Account<'info, Registry>,
+
+    /// One per authority, enforced by the seeds: registering twice fails
+    /// because the account already exists, not because of a check we wrote.
+    #[account(
+        init,
+        payer = authority,
+        space = 8 + Operator::INIT_SPACE,
+        seeds = [b"operator", pool.key().as_ref(), authority.key().as_ref()],
+        bump
+    )]
+    pub operator: Account<'info, Operator>,
+
+    #[account(
+        mut,
+        seeds = [b"stake_vault", pool.key().as_ref()],
+        bump = registry.stake_vault_bump
+    )]
+    pub stake_vault: Account<'info, TokenAccount>,
+
+    #[account(
+        mut,
+        constraint = operator_token.owner == authority.key() @ CoverError::WrongTokenOwner,
+        constraint = operator_token.mint == pool.mint @ CoverError::WrongMint
+    )]
+    pub operator_token: Account<'info, TokenAccount>,
+
+    pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct DeregisterOperator<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    #[account(seeds = [b"pool"], bump = pool.bump)]
+    pub pool: Account<'info, Pool>,
+
+    #[account(
+        mut,
+        seeds = [b"registry", pool.key().as_ref()],
+        bump = registry.bump
+    )]
+    pub registry: Account<'info, Registry>,
+
+    /// `has_one` means only the operator's own key can withdraw its stake —
+    /// the pool admin cannot deregister someone else and take it.
+    #[account(
+        mut,
+        close = authority,
+        seeds = [b"operator", pool.key().as_ref(), authority.key().as_ref()],
+        bump = operator.bump,
+        has_one = authority @ CoverError::NotOperator
+    )]
+    pub operator: Account<'info, Operator>,
+
+    #[account(
+        mut,
+        seeds = [b"stake_vault", pool.key().as_ref()],
+        bump = registry.stake_vault_bump
+    )]
+    pub stake_vault: Account<'info, TokenAccount>,
+
+    #[account(
+        mut,
+        constraint = operator_token.owner == authority.key() @ CoverError::WrongTokenOwner,
+        constraint = operator_token.mint == pool.mint @ CoverError::WrongMint
+    )]
+    pub operator_token: Account<'info, TokenAccount>,
+
+    pub token_program: Program<'info, Token>,
 }
 
 #[derive(Accounts)]
@@ -449,6 +746,19 @@ pub struct ClaimEscalated {
     pub reason: String,
 }
 
+#[event]
+pub struct OperatorRegistered {
+    pub operator: Pubkey,
+    pub authority: Pubkey,
+    pub stake: u64,
+}
+
+#[event]
+pub struct OperatorDeregistered {
+    pub authority: Pubkey,
+    pub stake: u64,
+}
+
 #[error_code]
 pub enum CoverError {
     #[msg("Payout is outside the permitted range")]
@@ -475,4 +785,12 @@ pub enum CoverError {
     PoolUnderfunded,
     #[msg("Basis string is too long")]
     BasisTooLong,
+    #[msg("Threshold must be at least 1")]
+    BadThreshold,
+    #[msg("Stake is below the registry minimum")]
+    StakeBelowMinimum,
+    #[msg("Operator still has attestations on unsettled claims")]
+    OperatorHasPendingAttestations,
+    #[msg("Signer is not this operator")]
+    NotOperator,
 }

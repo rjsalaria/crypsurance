@@ -134,6 +134,148 @@ export type Protocol = {
       ]
     },
     {
+      "name": "deregisterOperator",
+      "docs": [
+        "Leave the operator set and take the stake back.",
+        "",
+        "Refused while the operator has attestations on claims that haven't",
+        "settled yet — otherwise an operator could vote, see the verdict going",
+        "against them, and withdraw before week 3's slashing could reach the",
+        "stake."
+      ],
+      "discriminator": [
+        229,
+        98,
+        238,
+        100,
+        57,
+        56,
+        156,
+        124
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "operator"
+          ]
+        },
+        {
+          "name": "pool",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "operator",
+          "docs": [
+            "`has_one` means only the operator's own key can withdraw its stake —",
+            "the pool admin cannot deregister someone else and take it."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  112,
+                  101,
+                  114,
+                  97,
+                  116,
+                  111,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        },
+        {
+          "name": "stakeVault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  107,
+                  101,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "operatorToken",
+          "writable": true
+        },
+        {
+          "name": "tokenProgram",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "escalateClaim",
       "docs": [
         "The data was inconclusive: hand the claim to human verification rather",
@@ -384,6 +526,287 @@ export type Protocol = {
       ]
     },
     {
+      "name": "initializeRegistry",
+      "docs": [
+        "Create the operator registry and its stake vault.",
+        "",
+        "The registry is a separate account rather than extra fields on `Pool`",
+        "on purpose: the pool is already live on devnet holding policy counters",
+        "and a funded vault, and growing a money-holding account in place is a",
+        "migration, not a feature. Everything M3 adds is additive, so M2's",
+        "tested paths keep working untouched while consensus is built beside",
+        "them."
+      ],
+      "discriminator": [
+        189,
+        181,
+        20,
+        17,
+        174,
+        57,
+        249,
+        59
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "pool",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "stakeVault",
+          "docs": [
+            "Stake sits under the same PDA authority as premiums do."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  107,
+                  101,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "tokenProgram",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "rent",
+          "address": "SysvarRent111111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "threshold",
+          "type": "u8"
+        },
+        {
+          "name": "minStake",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "registerOperator",
+      "docs": [
+        "Join the operator set by staking SURETY.",
+        "",
+        "Registration is permissionless — that is the whole point of the",
+        "milestone. What keeps it honest is the stake: it sits in a vault owned",
+        "by the pool PDA, on the same terms as premiums, and week 3 makes it",
+        "slashable when an operator's attestation disagrees with the outcome."
+      ],
+      "discriminator": [
+        49,
+        242,
+        151,
+        125,
+        212,
+        136,
+        31,
+        89
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "docs": [
+            "Anyone may register — the stake is the gate, not a permission list."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "pool",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "operator",
+          "docs": [
+            "One per authority, enforced by the seeds: registering twice fails",
+            "because the account already exists, not because of a check we wrote."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  112,
+                  101,
+                  114,
+                  97,
+                  116,
+                  111,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        },
+        {
+          "name": "stakeVault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  107,
+                  101,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "operatorToken",
+          "writable": true
+        },
+        {
+          "name": "tokenProgram",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "stake",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "setOracle",
       "docs": [
         "Hand the oracle role to a different key (admin only)."
@@ -428,6 +851,63 @@ export type Protocol = {
         {
           "name": "newOracle",
           "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "setThreshold",
+      "docs": [
+        "Change how many agreeing attestations settle a claim (admin only)."
+      ],
+      "discriminator": [
+        155,
+        53,
+        245,
+        104,
+        116,
+        169,
+        239,
+        167
+      ],
+      "accounts": [
+        {
+          "name": "registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "registry.pool",
+                "account": "registry"
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "registry"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "threshold",
+          "type": "u8"
         }
       ]
     },
@@ -550,6 +1030,19 @@ export type Protocol = {
   ],
   "accounts": [
     {
+      "name": "operator",
+      "discriminator": [
+        219,
+        31,
+        188,
+        145,
+        69,
+        139,
+        204,
+        117
+      ]
+    },
+    {
       "name": "policy",
       "discriminator": [
         222,
@@ -573,6 +1066,19 @@ export type Protocol = {
         177,
         109,
         188
+      ]
+    },
+    {
+      "name": "registry",
+      "discriminator": [
+        47,
+        174,
+        110,
+        246,
+        184,
+        182,
+        252,
+        218
       ]
     }
   ],
@@ -627,6 +1133,32 @@ export type Protocol = {
         194,
         179,
         102
+      ]
+    },
+    {
+      "name": "operatorDeregistered",
+      "discriminator": [
+        106,
+        160,
+        149,
+        238,
+        140,
+        139,
+        115,
+        55
+      ]
+    },
+    {
+      "name": "operatorRegistered",
+      "discriminator": [
+        173,
+        220,
+        230,
+        105,
+        117,
+        97,
+        22,
+        133
       ]
     }
   ],
@@ -690,6 +1222,26 @@ export type Protocol = {
       "code": 6011,
       "name": "basisTooLong",
       "msg": "Basis string is too long"
+    },
+    {
+      "code": 6012,
+      "name": "badThreshold",
+      "msg": "Threshold must be at least 1"
+    },
+    {
+      "code": 6013,
+      "name": "stakeBelowMinimum",
+      "msg": "Stake is below the registry minimum"
+    },
+    {
+      "code": 6014,
+      "name": "operatorHasPendingAttestations",
+      "msg": "Operator still has attestations on unsettled claims"
+    },
+    {
+      "code": 6015,
+      "name": "notOperator",
+      "msg": "Signer is not this operator"
     }
   ],
   "types": [
@@ -780,6 +1332,98 @@ export type Protocol = {
           },
           {
             "name": "premium",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "operator",
+      "docs": [
+        "One registered claim verifier.",
+        "",
+        "`attestations` / `agreed` are a public track record: an operator that keeps",
+        "disagreeing with settled outcomes is visible before it is ever slashed."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "stake",
+            "docs": [
+              "Whole tokens, like payouts and premiums everywhere else."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "attestations",
+            "type": "u64"
+          },
+          {
+            "name": "agreed",
+            "type": "u64"
+          },
+          {
+            "name": "pending",
+            "docs": [
+              "Attestations on claims that haven't settled yet. Blocks withdrawal."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "active",
+            "type": "bool"
+          },
+          {
+            "name": "registeredAt",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "operatorDeregistered",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "stake",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "operatorRegistered",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "operator",
+            "type": "pubkey"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "stake",
             "type": "u64"
           }
         ]
@@ -911,6 +1555,53 @@ export type Protocol = {
           },
           {
             "name": "vaultBump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "registry",
+      "docs": [
+        "Consensus configuration and the operator roll-call.",
+        "",
+        "Deliberately separate from `Pool` — see `initialize_registry`."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "threshold",
+            "docs": [
+              "Agreeing attestations required to settle a claim."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "minStake",
+            "docs": [
+              "Whole tokens an operator must stake to join."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "operatorCount",
+            "type": "u16"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "stakeVaultBump",
             "type": "u8"
           }
         ]

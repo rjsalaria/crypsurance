@@ -37,12 +37,21 @@ describe("crypsurance protocol", () => {
   const oracle = Keypair.generate();
   const holder = Keypair.generate();
   const stranger = Keypair.generate();
+  // M3: three operators, because a threshold only means something above one
+  const opA = Keypair.generate();
+  const opB = Keypair.generate();
+  const opC = Keypair.generate();
 
   let mint: PublicKey;
   let pool: PublicKey;
   let vault: PublicKey;
+  let registry: PublicKey;
+  let stakeVault: PublicKey;
   let holderToken: PublicKey;
   let strangerToken: PublicKey;
+  const opToken: Record<string, PublicKey> = {};
+
+  const MIN_STAKE = 5_000;
 
   let nonce = 0;
   const nextNonce = () => new BN(++nonce);
@@ -73,8 +82,33 @@ describe("crypsurance protocol", () => {
     return { policy, n };
   }
 
+  const operatorPda = (owner: PublicKey) =>
+    PublicKey.findProgramAddressSync(
+      [Buffer.from("operator"), pool.toBuffer(), owner.toBuffer()],
+      program.programId
+    )[0];
+
+  /** Register `who` as an operator with `stake` whole tokens. */
+  async function register(who: Keypair, stake = MIN_STAKE) {
+    await program.methods
+      .registerOperator(new BN(stake))
+      .accountsPartial({
+        authority: who.publicKey,
+        pool,
+        registry,
+        operator: operatorPda(who.publicKey),
+        stakeVault,
+        operatorToken: opToken[who.publicKey.toBase58()],
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([who])
+      .rpc();
+    return operatorPda(who.publicKey);
+  }
+
   before(async () => {
-    for (const kp of [oracle, holder, stranger]) {
+    for (const kp of [oracle, holder, stranger, opA, opB, opC]) {
       const sig = await conn.requestAirdrop(kp.publicKey, 2 * LAMPORTS_PER_SOL);
       await conn.confirmTransaction(sig, "confirmed");
     }
@@ -91,9 +125,26 @@ describe("crypsurance protocol", () => {
     // fund the holder so they can pay premiums
     await mintTo(conn, admin, mint, holderToken, admin, ui(100_000));
 
+    // and the operators, so they can stake
+    for (const kp of [opA, opB, opC]) {
+      const ata = (
+        await getOrCreateAssociatedTokenAccount(conn, admin, mint, kp.publicKey)
+      ).address;
+      opToken[kp.publicKey.toBase58()] = ata;
+      await mintTo(conn, admin, mint, ata, admin, ui(50_000));
+    }
+
     [pool] = PublicKey.findProgramAddressSync([Buffer.from("pool")], program.programId);
     [vault] = PublicKey.findProgramAddressSync(
       [Buffer.from("vault"), pool.toBuffer()],
+      program.programId
+    );
+    [registry] = PublicKey.findProgramAddressSync(
+      [Buffer.from("registry"), pool.toBuffer()],
+      program.programId
+    );
+    [stakeVault] = PublicKey.findProgramAddressSync(
+      [Buffer.from("stake_vault"), pool.toBuffer()],
       program.programId
     );
   });
@@ -370,5 +421,162 @@ describe("crypsurance protocol", () => {
     assert.isAbove(p.policies.toNumber(), 0);
     assert.isAbove(p.claimsPaid.toNumber(), 0);
     assert.isAbove(p.claimsDenied.toNumber(), 0);
+  });
+
+  /* ---------------------------------------------------------------- */
+  /* M3 week 1 — the operator registry                                 */
+  /* ---------------------------------------------------------------- */
+
+  describe("operator registry", () => {
+    it("initializes with a stake vault the program owns", async () => {
+      await program.methods
+        .initializeRegistry(2, new BN(MIN_STAKE))
+        .accountsPartial({
+          authority: admin.publicKey,
+          pool,
+          registry,
+          stakeVault,
+          mint,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      const r = await program.account.registry.fetch(registry);
+      assert.equal(r.threshold, 2);
+      assert.equal(r.minStake.toNumber(), MIN_STAKE);
+      assert.equal(r.operatorCount, 0);
+
+      // Same property as the payout vault: stake is beyond any private key.
+      const sv = await getAccount(conn, stakeVault);
+      assert.equal(sv.owner.toBase58(), pool.toBase58());
+    });
+
+    it("refuses a threshold of zero", async () => {
+      try {
+        await program.methods
+          .setThreshold(0)
+          .accountsPartial({ registry, authority: admin.publicKey })
+          .rpc();
+        assert.fail("a zero threshold would settle claims with no agreement");
+      } catch (e: any) {
+        assert.include(e.toString(), "BadThreshold");
+      }
+    });
+
+    it("takes the stake into the vault when an operator registers", async () => {
+      const before = (await getAccount(conn, opToken[opA.publicKey.toBase58()])).amount;
+      const vaultBefore = (await getAccount(conn, stakeVault)).amount;
+
+      const op = await register(opA);
+
+      const o = await program.account.operator.fetch(op);
+      assert.equal(o.authority.toBase58(), opA.publicKey.toBase58());
+      assert.equal(o.stake.toNumber(), MIN_STAKE);
+      assert.equal(o.pending, 0);
+      assert.isTrue(o.active);
+
+      const after = (await getAccount(conn, opToken[opA.publicKey.toBase58()])).amount;
+      assert.equal(before - after, ui(MIN_STAKE), "stake actually left the wallet");
+      const vaultAfter = (await getAccount(conn, stakeVault)).amount;
+      assert.equal(vaultAfter - vaultBefore, ui(MIN_STAKE));
+
+      const r = await program.account.registry.fetch(registry);
+      assert.equal(r.operatorCount, 1);
+    });
+
+    it("rejects a stake below the minimum", async () => {
+      try {
+        await register(opB, MIN_STAKE - 1);
+        assert.fail("under-staked registration should be rejected");
+      } catch (e: any) {
+        assert.include(e.toString(), "StakeBelowMinimum");
+      }
+
+      // and the rejection left nothing behind
+      const r = await program.account.registry.fetch(registry);
+      assert.equal(r.operatorCount, 1);
+    });
+
+    it("will not let the same key register twice", async () => {
+      try {
+        await register(opA);
+        assert.fail("a second registration should collide with the existing PDA");
+      } catch (e: any) {
+        // 0x0 is the system program refusing to allocate an account that
+        // already exists — the collision happens before any of our code runs.
+        assert.include(e.toString(), "custom program error: 0x0");
+      }
+
+      const r = await program.account.registry.fetch(registry);
+      assert.equal(r.operatorCount, 1, "count must not drift on a failed register");
+    });
+
+    it("will not let the pool admin withdraw another operator's stake", async () => {
+      // The admin controls the pool, the oracle and the registry — but the
+      // operator account's seeds include the signer, so the admin literally
+      // cannot name someone else's operator account in this instruction.
+      try {
+        await program.methods
+          .deregisterOperator()
+          .accountsPartial({
+            authority: admin.publicKey,
+            pool,
+            registry,
+            operator: operatorPda(opA.publicKey),
+            stakeVault,
+            operatorToken: opToken[opA.publicKey.toBase58()],
+            tokenProgram: TOKEN_PROGRAM_ID,
+          })
+          .rpc();
+        assert.fail("the admin must not be able to take an operator's stake");
+      } catch (e: any) {
+        assert.include(e.toString(), "ConstraintSeeds");
+      }
+
+      const o = await program.account.operator.fetch(operatorPda(opA.publicKey));
+      assert.equal(o.stake.toNumber(), MIN_STAKE, "stake is untouched");
+    });
+
+    it("returns the stake when an operator leaves", async () => {
+      await register(opB, MIN_STAKE * 2);
+      const before = (await getAccount(conn, opToken[opB.publicKey.toBase58()])).amount;
+
+      await program.methods
+        .deregisterOperator()
+        .accountsPartial({
+          authority: opB.publicKey,
+          pool,
+          registry,
+          operator: operatorPda(opB.publicKey),
+          stakeVault,
+          operatorToken: opToken[opB.publicKey.toBase58()],
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([opB])
+        .rpc();
+
+      const after = (await getAccount(conn, opToken[opB.publicKey.toBase58()])).amount;
+      assert.equal(after - before, ui(MIN_STAKE * 2), "the whole stake came back");
+
+      // account closed, so the roll-call shrinks
+      const r = await program.account.registry.fetch(registry);
+      assert.equal(r.operatorCount, 1);
+      const gone = await conn.getAccountInfo(operatorPda(opB.publicKey));
+      assert.isNull(gone);
+    });
+
+    it("registers the three operators the sprint needs", async () => {
+      await register(opB);
+      await register(opC);
+
+      const r = await program.account.registry.fetch(registry);
+      assert.equal(r.operatorCount, 3);
+      assert.equal(
+        (await getAccount(conn, stakeVault)).amount,
+        ui(MIN_STAKE * 3),
+        "vault holds exactly the three stakes"
+      );
+    });
   });
 });
