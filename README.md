@@ -12,7 +12,7 @@ policy's own holder.
 Running on Solana **devnet**. Play money, real mechanics: everything below is a
 live account you can inspect yourself.
 
-- **Live:** [crypsurance.io/testnet](https://crypsurance.io/testnet) — take free
+- **Live:** [crypsurance.io/devnet](https://crypsurance.io/devnet) — take free
   test tokens from the faucet and run the whole loop
 - **Verifier network:** [network.crypsurance.io](https://network.crypsurance.io)
 - **Licence:** MIT

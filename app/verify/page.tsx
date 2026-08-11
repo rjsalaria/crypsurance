@@ -208,10 +208,10 @@ export default function VerifyPage() {
               Talk to us on Telegram
             </a>
             <Link
-              href="/testnet"
+              href="/devnet"
               className="px-7 py-3 rounded-xl font-display font-bold border border-muted/30 hover:border-cyan-neon/60 hover:text-cyan-neon transition-colors"
             >
-              Try the testnet
+              Try it on devnet
             </Link>
           </div>
         </div>

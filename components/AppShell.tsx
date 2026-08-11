@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import DemoJourney from "./DemoJourney";
 
 /* ---------------- staking (simulated) ---------------- */
@@ -136,17 +137,16 @@ export default function AppShell() {
             Ready for the real thing?
           </h2>
           <p className="mt-1 text-sm text-muted max-w-xl">
-            The dedicated testnet talks to the actual Solana devnet — real
-            wallets, the real SURETY token, and every protocol milestone as it
-            ships.
+            The devnet app talks to the actual Solana devnet — real wallets, the
+            real SURETY token, and every protocol milestone as it ships.
           </p>
         </div>
-        <a
-          href="/testnet"
+        <Link
+          href="/devnet"
           className="btn-gradient px-6 py-3 rounded-xl font-display font-bold text-white whitespace-nowrap"
         >
-          Enter Testnet →
-        </a>
+          Enter Devnet →
+        </Link>
       </div>
 
       <Staking />

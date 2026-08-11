@@ -6,7 +6,7 @@ backed by an on-chain link.
 
 Links used:
 - Site: https://crypsurance.io
-- Testnet: https://crypsurance.io/testnet
+- Testnet: https://crypsurance.io/devnet
 - Verifier Network: https://network.crypsurance.io
 - Telegram: https://t.me/suretytoken_official
 - Devnet mint: https://explorer.solana.com/address/8wAqKooKyqubCG9nNx2bfcq9TQ9jEJxojyhAMAdfsHn9?cluster=devnet
@@ -71,7 +71,7 @@ Try breaking it yourself (5 min, zero real money):
 
 1. Phantom wallet → Settings → Testnet Mode → select Solana Devnet
 2. Free devnet SOL: faucet.quicknode.com/solana/devnet
-3. Go to https://crypsurance.io/testnet
+3. Go to https://crypsurance.io/devnet
 4. Buy cover on flight TEST-DELAY → file the claim → watch it pay
 
 **8/**
@@ -100,7 +100,7 @@ testnet — not a promise, a product you can use today.
 
 **Start here (5 minutes):**
 1️⃣ Try the demo (no wallet needed): crypsurance.io/app
-2️⃣ Go on-chain: crypsurance.io/testnet — Phantom set to Solana Devnet + free devnet SOL from faucet.quicknode.com/solana/devnet
+2️⃣ Go on-chain: crypsurance.io/devnet — Phantom set to Solana Devnet + free devnet SOL from faucet.quicknode.com/solana/devnet
 3️⃣ Buy cover on flight **TEST-DELAY**, file your claim, watch it pay
 4️⃣ Watch every claim verify live: network.crypsurance.io
 5️⃣ Post your payout screenshot here — become a **Pioneer** 🏆
@@ -143,7 +143,7 @@ Solana Devnet → grab free devnet SOL at faucet.quicknode.com/solana/devnet.
 *Quiz: What network must Phantom show before you start? (Answer: Solana devnet)*
 
 **Task 4 — Get covered on-chain** (200 XP · submit tx link)
-Go to crypsurance.io/testnet → connect wallet → buy Travel Delay cover on
+Go to crypsurance.io/devnet → connect wallet → buy Travel Delay cover on
 flight **TEST-DELAY**. Real transaction, play money.
 *Submit: your purchase transaction link from Solana Explorer.*
 
@@ -192,7 +192,7 @@ trustless, and M2 is exactly what fixes it. Post 7–10pm IST.
 **Follow-up reply (thread it)**
 
 > While we build it, the current version stays live — grab test SURETY from the
-> faucet and run a full claim yourself: crypsurance.io/testnet
+> faucet and run a full claim yourself: crypsurance.io/devnet
 >
 > The oracle still wakes every 30 minutes and settles them — no one presses a
 > button. Check its heartbeat yourself:

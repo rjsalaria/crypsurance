@@ -1,202 +1,43 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import Blobs from "@/components/Blobs";
-import LiveDevnet from "@/components/LiveDevnet";
-import Faucet from "@/components/Faucet";
-import ProtocolStats from "@/components/ProtocolStats";
+import Redirect from "./Redirect";
 
+/**
+ * The page moved to /devnet, because devnet and testnet are two different
+ * Solana clusters and only one of them is ours.
+ *
+ * This stub stays. The old URL is printed in a submitted grant application, in
+ * posts already published, and in the Colosseum Eternal submission — none of
+ * which can be edited after the fact. A 404 there costs a reader we already
+ * persuaded to click.
+ *
+ * The redirect itself is client-side (see Redirect.tsx). The markup below is
+ * what someone with JavaScript disabled sees, so it has to stand on its own.
+ */
 export const metadata: Metadata = {
-  title: "Testnet — The Real Protocol",
-  description:
-    "The CrypSurance protocol being built in the open on Solana devnet: connect a real wallet, see the real SURETY token, and follow each milestone as it ships.",
+  title: "Moved to /devnet",
+  robots: { index: false, follow: true },
+  alternates: { canonical: "/devnet/" },
 };
 
-const milestones = [
-  {
-    id: "M1",
-    title: "Real wallet connection",
-    text: "Connect Phantom or Solflare and read live devnet balances — including the real SURETY token.",
-    status: "live",
-  },
-  {
-    id: "M2",
-    title: "Protocol programs",
-    text: "The policy, vault and claims programs — the smart contracts that ARE the protocol — deployed to devnet.",
-    status: "planned",
-  },
-  {
-    id: "M3",
-    title: "Buy real cover on devnet",
-    text: "v1 is live: pay a real SURETY premium into the pool, policy terms recorded on-chain in the transaction. Policy accounts + certificate NFTs arrive with the M2 programs.",
-    status: "testing",
-  },
-  {
-    id: "M4",
-    title: "Staking + oracle claims",
-    text: "Stake into underwriting pools; watch an oracle-verified event trigger an automatic payout, end to end.",
-    status: "planned",
-  },
-  {
-    id: "M5",
-    title: "Governance + Verifier Network",
-    text: "Token voting, and the multi-provider verification protocol where staked verifiers confirm real-world events. The Verifier Network portal preview is live — data registry, public verification console, and offline-verification escalation.",
-    status: "testing",
-  },
-];
-
-const statusStyle: Record<string, { label: string; cls: string }> = {
-  live: { label: "Live ✓", cls: "bg-lime-neon/15 text-lime-neon border-lime-neon/40" },
-  testing: { label: "V1 live", cls: "bg-cyan-neon/10 text-cyan-neon border-cyan-neon/40" },
-  building: { label: "Next", cls: "bg-cyan-neon/10 text-cyan-neon border-cyan-neon/40" },
-  planned: { label: "Planned", cls: "bg-surface text-muted border-muted/30" },
-};
-
-export default function TestnetPage() {
+export default function TestnetMoved() {
   return (
-    <>
-      <Blobs />
-
-      <section className="pt-32 pb-10 px-4 sm:px-6">
-        <div className="mx-auto max-w-6xl">
-          <span className="inline-flex items-center gap-2 rounded-full border border-lime-neon/40 bg-lime-neon/10 px-3 py-1 text-xs font-bold uppercase tracking-widest text-lime-neon">
-            <span className="h-1.5 w-1.5 rounded-full bg-lime-neon animate-pulse" />
-            Solana devnet · play money, real technology
-          </span>
-          <h1 className="mt-4 font-display text-4xl sm:text-5xl font-bold leading-tight">
-            The protocol, <span className="text-gradient">built in the open.</span>
-          </h1>
-          <p className="mt-3 text-muted max-w-2xl leading-relaxed">
-            This is not a simulation — everything on this page talks to the
-            real Solana devnet. Each milestone ships here first, gets
-            battle-tested by the community, and stands ready for the day
-            regulation opens the door to mainnet. Prefer a gentle guided tour
-            instead?{" "}
-            <Link href="/app" className="text-cyan-neon hover:underline">
-              Try the demo
-            </Link>
-            .
-          </p>
-        </div>
-      </section>
-
-      {/* live proof the protocol is actually being used */}
-      <section className="px-4 sm:px-6 pb-6">
-        <div className="mx-auto max-w-6xl">
-          <ProtocolStats />
-        </div>
-      </section>
-
-      <section className="px-4 sm:px-6 pb-10">
-        <div className="mx-auto max-w-6xl">
-          <LiveDevnet />
-        </div>
-      </section>
-
-      {/* SURETY faucet */}
-      <section className="px-4 sm:px-6 pb-10">
-        <div className="mx-auto max-w-6xl">
-          <Faucet />
-        </div>
-      </section>
-
-      {/* verifier network gateway */}
-      <section className="px-4 sm:px-6 pb-4">
-        <div className="mx-auto max-w-6xl glass-card glass-card-hover p-6 flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-cyan-neon">
-              network.crypsurance.io
-            </p>
-            <h2 className="mt-1 font-display text-xl font-bold">
-              Watch your claim get verified — the{" "}
-              <span className="text-gradient">Verifier Network</span>
-            </h2>
-            <p className="mt-1 text-sm text-muted max-w-xl">
-              Every policy, claim, verification and payout on this page appears
-              live on the network&apos;s public console — including offline
-              verification requests waiting on partners.
-            </p>
-          </div>
-          <a
-            href="https://network.crypsurance.io"
-            className="btn-gradient px-6 py-3 rounded-xl font-display font-bold text-white whitespace-nowrap"
-          >
-            Open Verifier Network →
-          </a>
-        </div>
-      </section>
-
-      {/* milestones */}
-      <section className="px-4 sm:px-6 py-14">
-        <div className="mx-auto max-w-6xl">
-          <h2 className="font-display text-2xl sm:text-3xl font-bold">
-            Build milestones
-          </h2>
-          <p className="mt-2 text-sm text-muted max-w-2xl">
-            The road from token to full protocol. Everything lands on this page
-            as it ships — no promises, just working software.
-          </p>
-          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {milestones.map((m) => (
-              <div key={m.id} className="glass-card glass-card-hover p-6">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="font-display text-2xl font-bold text-gradient">{m.id}</span>
-                  <span className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest ${statusStyle[m.status].cls}`}>
-                    {statusStyle[m.status].label}
-                  </span>
-                </div>
-                <h3 className="mt-3 font-display font-bold">{m.title}</h3>
-                <p className="mt-2 text-sm text-muted leading-relaxed">{m.text}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* how to join */}
-      <section className="px-4 sm:px-6 pb-8">
-        <div className="mx-auto max-w-6xl glass-card ring-glow px-6 py-12">
-          <h2 className="font-display text-2xl font-bold">Join the testnet in 3 steps</h2>
-          <ol className="mt-6 grid gap-6 md:grid-cols-3 text-sm">
-            <li className="flex gap-4">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-cyan-neon text-void font-display font-bold">1</span>
-              <div>
-                <p className="font-semibold">Install Phantom</p>
-                <p className="mt-1 text-muted">
-                  phantom.com → create a wallet → Settings → Developer Settings
-                  → switch on <b>Testnet Mode</b>, then select{" "}
-                  <b>Solana Devnet</b>. That toggle only reveals the test
-                  networks — picking Testnet instead of Devnet lands you on a
-                  different chain, where none of this exists.
-                </p>
-              </div>
-            </li>
-            <li className="flex gap-4">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-cyan-neon text-void font-display font-bold">2</span>
-              <div>
-                <p className="font-semibold">Get free devnet SOL</p>
-                <p className="mt-1 text-muted">
-                  faucet.quicknode.com/solana/devnet — connect Phantom, request.
-                  It&apos;s play money for testing; it costs and is worth nothing.
-                </p>
-              </div>
-            </li>
-            <li className="flex gap-4">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-cyan-neon text-void font-display font-bold">3</span>
-              <div>
-                <p className="font-semibold">Get SURETY &amp; connect</p>
-                <p className="mt-1 text-muted">
-                  Grab free test{" "}
-                  <a href="#faucet" className="text-cyan-neon hover:underline">
-                    SURETY from the faucet
-                  </a>{" "}
-                  above, then connect to buy cover and stake — before anyone
-                  else.
-                </p>
-              </div>
-            </li>
-          </ol>
-        </div>
-      </section>
-    </>
+    <section className="px-4 sm:px-6 py-24">
+      <Redirect />
+      <div className="mx-auto max-w-xl glass-card px-6 py-10 text-center">
+        <h1 className="font-display text-2xl font-bold">This page moved</h1>
+        <p className="mt-3 text-sm text-muted">
+          It now lives at <span className="font-mono">/devnet</span> — the
+          protocol runs on Solana devnet, which is a different network from
+          Solana testnet.
+        </p>
+        <Link
+          href="/devnet/"
+          className="btn-gradient mt-6 inline-block rounded-xl px-6 py-3 font-display font-bold text-white"
+        >
+          Continue to the devnet app →
+        </Link>
+      </div>
+    </section>
   );
 }

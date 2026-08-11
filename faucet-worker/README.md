@@ -10,7 +10,7 @@ rate-limits requests, and does the on-chain transfer.
 |---|---|
 | Worker name | `crypsurance-faucet` |
 | Live URL | `https://crypsurance-faucet.surety.workers.dev` |
-| Frontend | `components/Faucet.tsx` → `FAUCET_ENDPOINT` (testnet page `/testnet`) |
+| Frontend | `components/Faucet.tsx` → `FAUCET_ENDPOINT` (devnet page `/devnet`) |
 | Sender (pool) wallet | `9txXv5nFKu4E9AmykbcLGSRiyxM19C81HJqFmJbsBkxy` |
 | SURETY mint | `8wAqKooKyqubCG9nNx2bfcq9TQ9jEJxojyhAMAdfsHn9` |
 | Rate-limit store | KV `FAUCET_KV` (`e3a76037b6364bc98aa0752680c538a6`) |
