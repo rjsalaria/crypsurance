@@ -163,7 +163,10 @@ export default function TestnetPage() {
                 <p className="font-semibold">Install Phantom</p>
                 <p className="mt-1 text-muted">
                   phantom.com → create a wallet → Settings → Developer Settings
-                  → switch on <b>Testnet Mode</b>.
+                  → switch on <b>Testnet Mode</b>, then select{" "}
+                  <b>Solana Devnet</b>. That toggle only reveals the test
+                  networks — picking Testnet instead of Devnet lands you on a
+                  different chain, where none of this exists.
                 </p>
               </div>
             </li>

@@ -69,7 +69,7 @@ https://explorer.solana.com/address/8wAqKooKyqubCG9nNx2bfcq9TQ9jEJxojyhAMAdfsHn9
 **7/**
 Try breaking it yourself (5 min, zero real money):
 
-1. Phantom wallet → Settings → Testnet Mode
+1. Phantom wallet → Settings → Testnet Mode → select Solana Devnet
 2. Free devnet SOL: faucet.quicknode.com/solana/devnet
 3. Go to https://crypsurance.io/testnet
 4. Buy cover on flight TEST-DELAY → file the claim → watch it pay
@@ -100,7 +100,7 @@ testnet — not a promise, a product you can use today.
 
 **Start here (5 minutes):**
 1️⃣ Try the demo (no wallet needed): crypsurance.io/app
-2️⃣ Go on-chain: crypsurance.io/testnet — Phantom in Testnet Mode + free devnet SOL from faucet.quicknode.com/solana/devnet
+2️⃣ Go on-chain: crypsurance.io/testnet — Phantom set to Solana Devnet + free devnet SOL from faucet.quicknode.com/solana/devnet
 3️⃣ Buy cover on flight **TEST-DELAY**, file your claim, watch it pay
 4️⃣ Watch every claim verify live: network.crypsurance.io
 5️⃣ Post your payout screenshot here — become a **Pioneer** 🏆
@@ -138,8 +138,8 @@ Follow @crypsurance on X. Weekly claims-paid reports, build-in-public updates,
 zero-fluff.
 
 **Task 3 — Gear up** (100 XP · quiz)
-Install Phantom → Settings → Developer Settings → Testnet Mode ON → grab free
-devnet SOL at faucet.quicknode.com/solana/devnet.
+Install Phantom → Settings → Developer Settings → Testnet Mode ON → select
+Solana Devnet → grab free devnet SOL at faucet.quicknode.com/solana/devnet.
 *Quiz: What network must Phantom show before you start? (Answer: Solana devnet)*
 
 **Task 4 — Get covered on-chain** (200 XP · submit tx link)
