@@ -44,6 +44,11 @@ yarn-error.log*
 # operator signing keys — devnet, but keys are keys and never belong in git
 /protocol/.operators/
 
+# competition material and video scripts — kept local, not published
+/colosseum/
+*.loom.md
+/video-scripts.md
+
 # vercel
 .vercel
 
