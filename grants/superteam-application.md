@@ -15,10 +15,7 @@ run by Superteam India (contact: [@paarugsethi](https://x.com/paarugsethi))
 > mentioning if the reviewer follows up — it is a strict improvement on what
 > was submitted, not a walk-back.
 
-**Video pitch (submitted):**
-"Running Parametric Flight Insurance on Solana DevNet" · 9:37 ·
-public access verified 2026-08-03 (oEmbed resolves, so an unauthenticated
-reviewer can watch it).
+**Video pitch:** submitted 2026-08-03, link kept out of the repo.
 
 > ⚠️ The *CoinDCX* India grant (up to 15k) is **CLOSED** — its Apply button is
 > disabled. Search results and cached listings still show it as live; don't
@@ -302,6 +299,4 @@ the full loop in two minutes and verify it on Solana Explorer.
 **Use of funds:** Anchor programs (5,000) · independent security review (2,500) ·
 infrastructure and event-data feeds (1,200) · community testnet bug bounty
 (1,000) · open-source docs (300).
-
----
 
