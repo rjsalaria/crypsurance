@@ -41,6 +41,9 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# operator signing keys — devnet, but keys are keys and never belong in git
+/protocol/.operators/
+
 # vercel
 .vercel
 
