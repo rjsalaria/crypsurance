@@ -42,8 +42,24 @@ const KEY_DIR = path.join(__dirname, "../.operators");
 
 const base = (n) => BigInt(n) * 10n ** DECIMALS;
 
+/**
+ * Explicit keypairs to register, comma-separated, instead of generated ones.
+ * Used to enrol keys that already exist — the oracle's, for instance, which
+ * has to become an ordinary operator now that attesting is the only way to
+ * influence a claim.
+ */
+const EXPLICIT = (process.env.OPERATOR_KEYPAIRS || "")
+  .split(",")
+  .map((x) => x.trim())
+  .filter(Boolean);
+
 /** Load operator keypair `i`, creating and saving it the first time. */
 function operatorKey(i) {
+  if (EXPLICIT.length) {
+    return Keypair.fromSecretKey(
+      Uint8Array.from(JSON.parse(fs.readFileSync(EXPLICIT[i - 1], "utf8")))
+    );
+  }
   fs.mkdirSync(KEY_DIR, { recursive: true });
   const file = path.join(KEY_DIR, `operator-${i}.json`);
   if (fs.existsSync(file)) {
@@ -58,7 +74,7 @@ function operatorKey(i) {
 }
 
 (async () => {
-  const count = Number(process.argv[2] || 3);
+  const count = EXPLICIT.length || Number(process.argv[2] || 3);
   const stake = Number(process.argv[3] || 5000);
 
   const rpc = (process.env.RPC_URL || "https://api.devnet.solana.com").trim();
