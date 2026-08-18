@@ -10,13 +10,16 @@
  * answers all of them, so the oracle lives here and the Worker keeps the
  * faucet, the RPC proxy and the heartbeat.
  *
- * The oracle decides whether a claim is valid. It cannot decide who gets paid:
- * settle_claim pays the policy's own holder from a program-owned vault.
+ * As of M3 this process is one registered operator among several, not the
+ * oracle. It attests; it does not decide. Settlement happens only when the
+ * registry's threshold of operators agree, and the crank that triggers it is
+ * permissionless — running it here is convenience, not authority. The payout
+ * still goes to the policy's own holder from a program-owned vault.
  */
 const fs = require("fs");
 const path = require("path");
 const anchor = require("@coral-xyz/anchor");
-const { PublicKey, Keypair, Connection } = require("@solana/web3.js");
+const { PublicKey, Keypair, Connection, SystemProgram } = require("@solana/web3.js");
 const { getAssociatedTokenAddress, TOKEN_PROGRAM_ID } = require("@solana/spl-token");
 
 const SURETY_MINT = new PublicKey("8wAqKooKyqubCG9nNx2bfcq9TQ9jEJxojyhAMAdfsHn9");
@@ -95,6 +98,11 @@ async function verifyFlight(flight, date, apiKey) {
     program.programId
   );
 
+  const [registry] = PublicKey.findProgramAddressSync(
+    [Buffer.from("registry"), pool.toBuffer()],
+    program.programId
+  );
+
   const all = await program.account.policy.all();
   const status = (a) => Object.keys(a.status)[0];
   const pending = all.filter((p) => status(p.account) === "requested");
@@ -106,14 +114,18 @@ async function verifyFlight(flight, date, apiKey) {
 
   for (const { publicKey: policy, account: a } of pending) {
     const holderToken = await getAssociatedTokenAddress(SURETY_MINT, a.holder);
-    const accounts = {
-      oracle: oracle.publicKey,
-      pool,
-      policy,
-      vault,
-      holderToken,
-      tokenProgram: TOKEN_PROGRAM_ID,
-    };
+    const [tally] = PublicKey.findProgramAddressSync(
+      [Buffer.from("tally"), policy.toBuffer()],
+      program.programId
+    );
+    const [operatorAccount] = PublicKey.findProgramAddressSync(
+      [Buffer.from("operator"), pool.toBuffer(), oracle.publicKey.toBuffer()],
+      program.programId
+    );
+    const [attestation] = PublicKey.findProgramAddressSync(
+      [Buffer.from("attest"), policy.toBuffer(), operatorAccount.toBuffer()],
+      program.programId
+    );
 
     const verdict = await verifyFlight(a.flight, a.date, apiKey);
 
@@ -125,7 +137,7 @@ async function verifyFlight(flight, date, apiKey) {
       if (DRY_RUN) continue;
       const sig = await program.methods
         .escalateClaim(verdict.reason.slice(0, 64))
-        .accountsPartial(accounts)
+        .accountsPartial({ oracle: oracle.publicKey, pool, policy })
         .rpc();
       console.log(`   ${sig}`);
       continue;
@@ -135,11 +147,53 @@ async function verifyFlight(flight, date, apiKey) {
       `${verdict.delayed ? "✓" : "✗"} ${a.flight} ${a.date} -> ${verdict.delayed ? "PAY" : "DENY"} ${a.payout} SURETY [${verdict.basis}]`
     );
     if (DRY_RUN) continue;
-    const sig = await program.methods
-      .settleClaim(verdict.delayed, verdict.basis)
-      .accountsPartial(accounts)
-      .rpc();
-    console.log(`   ${sig}`);
+
+    // Attest, unless this operator already has. Its own vote settles nothing:
+    // the program counts attestations and only pays once the registry's
+    // threshold agrees.
+    if (!(await connection.getAccountInfo(attestation))) {
+      const sig = await program.methods
+        .attestClaim(verdict.delayed, verdict.basis)
+        .accountsPartial({
+          authority: oracle.publicKey,
+          pool,
+          registry,
+          operator: operatorAccount,
+          policy,
+          tally,
+          attestation,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+      console.log(`   attested ${sig}`);
+    } else {
+      console.log("   already attested");
+    }
+
+    // Then crank settlement if the threshold is now met. Anyone may do this —
+    // running it here is convenience, not authority.
+    const t = await program.account.claimTally.fetch(tally);
+    const reg = await program.account.registry.fetch(registry);
+    if (t.approvals >= reg.threshold || t.denials >= reg.threshold) {
+      const sig = await program.methods
+        .settleClaim()
+        .accountsPartial({
+          cranker: oracle.publicKey,
+          pool,
+          registry,
+          policy,
+          tally,
+          vault,
+          holderToken,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .rpc();
+      console.log(`   settled ${sig}`);
+    } else {
+      console.log(
+        `   ${t.approvals}/${reg.threshold} approvals — waiting for other operators`
+      );
+    }
   }
 
   console.log("done");

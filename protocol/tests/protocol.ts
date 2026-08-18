@@ -6,10 +6,13 @@
  *
  *   - the premium is computed on-chain, so a client cannot under-pay;
  *   - only the holder can claim their own policy;
- *   - only the oracle can settle, and it CANNOT choose the recipient — the
- *     "oracle can't decide where the money goes" claim is what makes M2
- *     meaningfully different from the memo prototype, so it gets a test;
- *   - a claim cannot be settled twice, or claimed twice.
+ *   - settlement needs M-of-N operators to agree, and the account that submits
+ *     it is checked against nothing — no single key can settle a claim;
+ *   - whoever decides a claim still CANNOT choose the recipient. That property
+ *     is what makes this different from a company with a database, and it has
+ *     to survive every change to how the verdict is reached, so it is tested
+ *     under consensus exactly as it was under a single oracle;
+ *   - an operator cannot vote twice, and a claim cannot be settled twice.
  */
 import * as anchor from "@coral-xyz/anchor";
 import { Program, BN } from "@coral-xyz/anchor";
@@ -105,6 +108,78 @@ describe("crypsurance protocol", () => {
       .signers([who])
       .rpc();
     return operatorPda(who.publicKey);
+  }
+
+  const tallyPda = (policy: PublicKey) =>
+    PublicKey.findProgramAddressSync(
+      [Buffer.from("tally"), policy.toBuffer()],
+      program.programId
+    )[0];
+
+  const attestPda = (policy: PublicKey, operatorAccount: PublicKey) =>
+    PublicKey.findProgramAddressSync(
+      [Buffer.from("attest"), policy.toBuffer(), operatorAccount.toBuffer()],
+      program.programId
+    )[0];
+
+  /** File a claim, opening its tally. */
+  async function file(policy: PublicKey, who = holder) {
+    await program.methods
+      .fileClaim()
+      .accountsPartial({
+        holder: who.publicKey,
+        policy,
+        tally: tallyPda(policy),
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([who])
+      .rpc();
+  }
+
+  /** One operator's verdict. */
+  async function attest(
+    who: Keypair,
+    policy: PublicKey,
+    approved: boolean,
+    basis = "testnet-simulated"
+  ) {
+    const operatorAccount = operatorPda(who.publicKey);
+    await program.methods
+      .attestClaim(approved, basis)
+      .accountsPartial({
+        authority: who.publicKey,
+        pool,
+        registry,
+        operator: operatorAccount,
+        policy,
+        tally: tallyPda(policy),
+        attestation: attestPda(policy, operatorAccount),
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([who])
+      .rpc();
+  }
+
+  /** Crank settlement. The signer is deliberately arbitrary. */
+  async function settle(
+    policy: PublicKey,
+    token = holderToken,
+    cranker: Keypair = stranger
+  ) {
+    await program.methods
+      .settleClaim()
+      .accountsPartial({
+        cranker: cranker.publicKey,
+        pool,
+        registry,
+        policy,
+        tally: tallyPda(policy),
+        vault,
+        holderToken: token,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([cranker])
+      .rpc();
   }
 
   before(async () => {
@@ -203,224 +278,18 @@ describe("crypsurance protocol", () => {
 
     // a stranger signing for someone else's policy must fail
     try {
-      await program.methods
-        .fileClaim()
-        .accountsPartial({ holder: stranger.publicKey, policy })
-        .signers([stranger])
-        .rpc();
+      await file(policy, stranger);
       assert.fail("a stranger should not be able to file this claim");
     } catch (e: any) {
       // the PDA is derived from the signer, so this fails as a seeds/has_one violation
       assert.ok(e.toString().length > 0);
     }
 
-    await program.methods
-      .fileClaim()
-      .accountsPartial({ holder: holder.publicKey, policy })
-      .signers([holder])
-      .rpc();
+    await file(policy);
 
     const p = await program.account.policy.fetch(policy);
     assert.deepEqual(p.status, { requested: {} });
     assert.equal(n.toNumber(), nonce);
-  });
-
-  it("refuses to settle for anyone but the oracle", async () => {
-    const { policy } = await buy(10_000);
-    await program.methods
-      .fileClaim()
-      .accountsPartial({ holder: holder.publicKey, policy })
-      .signers([holder])
-      .rpc();
-
-    try {
-      await program.methods
-        .settleClaim(true, "forged")
-        .accountsPartial({
-          oracle: stranger.publicKey,
-          pool,
-          policy,
-          vault,
-          holderToken,
-          tokenProgram: TOKEN_PROGRAM_ID,
-        })
-        .signers([stranger])
-        .rpc();
-      assert.fail("a non-oracle settled a claim");
-    } catch (e: any) {
-      assert.include(e.toString(), "NotOracle");
-    }
-  });
-
-  it("will not let the oracle redirect a payout to another wallet", async () => {
-    const { policy } = await buy(10_000);
-    await program.methods
-      .fileClaim()
-      .accountsPartial({ holder: holder.publicKey, policy })
-      .signers([holder])
-      .rpc();
-
-    // The oracle is legitimate here — it is the DESTINATION that is wrong.
-    // Even a fully compromised oracle key must not be able to steal a payout.
-    try {
-      await program.methods
-        .settleClaim(true, "testnet-simulated")
-        .accountsPartial({
-          oracle: oracle.publicKey,
-          pool,
-          policy,
-          vault,
-          holderToken: strangerToken,
-          tokenProgram: TOKEN_PROGRAM_ID,
-        })
-        .signers([oracle])
-        .rpc();
-      assert.fail("the oracle redirected a payout away from the holder");
-    } catch (e: any) {
-      assert.include(e.toString(), "WrongTokenOwner");
-    }
-  });
-
-  it("pays the holder from the vault when the oracle approves", async () => {
-    const { policy } = await buy(10_000);
-    await program.methods
-      .fileClaim()
-      .accountsPartial({ holder: holder.publicKey, policy })
-      .signers([holder])
-      .rpc();
-
-    const holderBefore = (await getAccount(conn, holderToken)).amount;
-    const vaultBefore = (await getAccount(conn, vault)).amount;
-
-    await program.methods
-      .settleClaim(true, "testnet-simulated")
-      .accountsPartial({
-        oracle: oracle.publicKey,
-        pool,
-        policy,
-        vault,
-        holderToken,
-        tokenProgram: TOKEN_PROGRAM_ID,
-      })
-      .signers([oracle])
-      .rpc();
-
-    const p = await program.account.policy.fetch(policy);
-    assert.deepEqual(p.status, { paid: {} });
-    assert.equal(p.basis, "testnet-simulated");
-
-    const holderAfter = (await getAccount(conn, holderToken)).amount;
-    const vaultAfter = (await getAccount(conn, vault)).amount;
-    assert.equal(holderAfter - holderBefore, ui(10_000), "holder received the payout");
-    assert.equal(vaultBefore - vaultAfter, ui(10_000), "vault paid it");
-  });
-
-  it("does not move funds when a claim is denied", async () => {
-    const { policy } = await buy(10_000);
-    await program.methods
-      .fileClaim()
-      .accountsPartial({ holder: holder.publicKey, policy })
-      .signers([holder])
-      .rpc();
-
-    const vaultBefore = (await getAccount(conn, vault)).amount;
-    await program.methods
-      .settleClaim(false, "flight on time")
-      .accountsPartial({
-        oracle: oracle.publicKey,
-        pool,
-        policy,
-        vault,
-        holderToken,
-        tokenProgram: TOKEN_PROGRAM_ID,
-      })
-      .signers([oracle])
-      .rpc();
-
-    const p = await program.account.policy.fetch(policy);
-    assert.deepEqual(p.status, { denied: {} });
-    assert.equal((await getAccount(conn, vault)).amount, vaultBefore);
-  });
-
-  it("cannot settle the same claim twice", async () => {
-    const { policy } = await buy(10_000);
-    await program.methods
-      .fileClaim()
-      .accountsPartial({ holder: holder.publicKey, policy })
-      .signers([holder])
-      .rpc();
-
-    const settle = () =>
-      program.methods
-        .settleClaim(true, "testnet-simulated")
-        .accountsPartial({
-          oracle: oracle.publicKey,
-          pool,
-          policy,
-          vault,
-          holderToken,
-          tokenProgram: TOKEN_PROGRAM_ID,
-        })
-        .signers([oracle])
-        .rpc();
-
-    await settle();
-    try {
-      await settle();
-      assert.fail("a settled claim was paid a second time");
-    } catch (e: any) {
-      assert.include(e.toString(), "NotSettleable");
-    }
-  });
-
-  it("escalates an unverifiable claim, and can settle it afterwards", async () => {
-    const { policy } = await buy(10_000, "AI302");
-    await program.methods
-      .fileClaim()
-      .accountsPartial({ holder: holder.publicKey, policy })
-      .signers([holder])
-      .rpc();
-
-    await program.methods
-      .escalateClaim("no flight data")
-      .accountsPartial({
-        oracle: oracle.publicKey,
-        pool,
-        policy,
-        vault,
-        holderToken,
-        tokenProgram: TOKEN_PROGRAM_ID,
-      })
-      .signers([oracle])
-      .rpc();
-
-    let p = await program.account.policy.fetch(policy);
-    assert.deepEqual(p.status, { escalated: {} });
-
-    // human verification came back positive
-    await program.methods
-      .settleClaim(true, "partner:AirlineDesk")
-      .accountsPartial({
-        oracle: oracle.publicKey,
-        pool,
-        policy,
-        vault,
-        holderToken,
-        tokenProgram: TOKEN_PROGRAM_ID,
-      })
-      .signers([oracle])
-      .rpc();
-
-    p = await program.account.policy.fetch(policy);
-    assert.deepEqual(p.status, { paid: {} });
-    assert.equal(p.basis, "partner:AirlineDesk");
-  });
-
-  it("keeps a running count of policies and settlements", async () => {
-    const p = await program.account.pool.fetch(pool);
-    assert.isAbove(p.policies.toNumber(), 0);
-    assert.isAbove(p.claimsPaid.toNumber(), 0);
-    assert.isAbove(p.claimsDenied.toNumber(), 0);
   });
 
   /* ---------------------------------------------------------------- */
@@ -579,4 +448,168 @@ describe("crypsurance protocol", () => {
       );
     });
   });
+  /* ---------------------------------------------------------------- */
+  /* M3 week 2 — attestations and M-of-N settlement                    */
+  /* ---------------------------------------------------------------- */
+
+  describe("consensus settlement", () => {
+    /** Buy cover and file the claim, ready to be attested. */
+    async function claimable(payout = 10_000, flight = "TEST-DELAY") {
+      const { policy } = await buy(payout, flight);
+      await file(policy);
+      return policy;
+    }
+
+    it("will not settle before the threshold is met", async () => {
+      const policy = await claimable();
+      await attest(opA, policy, true);
+
+      try {
+        await settle(policy);
+        assert.fail("one attestation settled a claim needing two");
+      } catch (e: any) {
+        assert.include(e.toString(), "ThresholdNotMet");
+      }
+
+      const p = await program.account.policy.fetch(policy);
+      assert.deepEqual(p.status, { requested: {} }, "still awaiting agreement");
+    });
+
+    it("pays the holder once two operators agree, with nobody privileged signing", async () => {
+      const policy = await claimable();
+      const before = (await getAccount(conn, holderToken)).amount;
+
+      await attest(opA, policy, true, "delay 214 min");
+      await attest(opB, policy, true, "delay 214 min");
+
+      // `stranger` has no role: not the oracle, not an operator, not the
+      // holder. If this settles, settlement is genuinely permissionless.
+      await settle(policy, holderToken, stranger);
+
+      const after = (await getAccount(conn, holderToken)).amount;
+      assert.equal(after - before, ui(10_000), "the payout reached the holder");
+
+      const p = await program.account.policy.fetch(policy);
+      assert.deepEqual(p.status, { paid: {} });
+      assert.equal(p.basis, "delay 214 min");
+    });
+
+    it("will not let an operator redirect a payout to another wallet", async () => {
+      // The M2 guarantee, restated for consensus: operators decide whether a
+      // claim is valid and never who is paid. This is the test the product's
+      // central claim rests on, and it must survive every change to how the
+      // verdict is reached.
+      const policy = await claimable();
+      await attest(opA, policy, true);
+      await attest(opB, policy, true);
+
+      try {
+        await settle(policy, strangerToken, stranger);
+        assert.fail("a payout was redirected away from the policy holder");
+      } catch (e: any) {
+        assert.include(e.toString(), "WrongTokenOwner");
+      }
+
+      const p = await program.account.policy.fetch(policy);
+      assert.deepEqual(p.status, { requested: {} }, "nothing settled");
+    });
+
+    it("will not let one operator attest twice to reach the threshold alone", async () => {
+      const policy = await claimable();
+      await attest(opA, policy, true);
+
+      try {
+        await attest(opA, policy, true);
+        assert.fail("an operator voted twice");
+      } catch (e: any) {
+        // the attestation PDA already exists — the system program refuses to
+        // allocate it again, before any of our logic runs
+        assert.include(e.toString(), "custom program error: 0x0");
+      }
+
+      const t = await program.account.claimTally.fetch(tallyPda(policy));
+      assert.equal(t.approvals, 1, "the tally did not move");
+    });
+
+    it("refuses an attestation from a key that is not a registered operator", async () => {
+      const policy = await claimable();
+      try {
+        await attest(stranger, policy, true);
+        assert.fail("an unregistered key attested");
+      } catch (e: any) {
+        // no Operator account exists at the seeds derived from this signer
+        assert.ok(e.toString().length > 0);
+      }
+    });
+
+    it("denies the claim when the operators agree it should not pay", async () => {
+      const policy = await claimable(10_000, "TEST-ONTIME");
+      const vaultBefore = (await getAccount(conn, vault)).amount;
+      const holderBefore = (await getAccount(conn, holderToken)).amount;
+
+      await attest(opA, policy, false, "on time");
+      await attest(opB, policy, false, "on time");
+      await settle(policy);
+
+      const p = await program.account.policy.fetch(policy);
+      assert.deepEqual(p.status, { denied: {} });
+      assert.equal(
+        (await getAccount(conn, vault)).amount,
+        vaultBefore,
+        "a denial must not move funds"
+      );
+      assert.equal((await getAccount(conn, holderToken)).amount, holderBefore);
+    });
+
+    it("cannot settle the same claim twice", async () => {
+      const policy = await claimable();
+      await attest(opA, policy, true);
+      await attest(opB, policy, true);
+      await settle(policy);
+
+      try {
+        await settle(policy);
+        assert.fail("a settled claim was settled again");
+      } catch (e: any) {
+        assert.include(e.toString(), "NotSettleable");
+      }
+    });
+
+    it("counts each operator's attestations against their stake", async () => {
+      const o = await program.account.operator.fetch(operatorPda(opA.publicKey));
+      assert.isAbove(o.attestations.toNumber(), 0);
+      // pending stays raised until week 3 judges each attestation, which is
+      // what stops an operator withdrawing before its votes are assessed
+      assert.isAbove(o.pending, 0);
+    });
+
+    it("will not let an operator withdraw stake with attestations outstanding", async () => {
+      try {
+        await program.methods
+          .deregisterOperator()
+          .accountsPartial({
+            authority: opA.publicKey,
+            pool,
+            registry,
+            operator: operatorPda(opA.publicKey),
+            stakeVault,
+            operatorToken: opToken[opA.publicKey.toBase58()],
+            tokenProgram: TOKEN_PROGRAM_ID,
+          })
+          .signers([opA])
+          .rpc();
+        assert.fail("an operator withdrew while its votes were unjudged");
+      } catch (e: any) {
+        assert.include(e.toString(), "OperatorHasPendingAttestations");
+      }
+    });
+
+    it("keeps a running count of policies and settlements", async () => {
+      const p = await program.account.pool.fetch(pool);
+      assert.isAbove(p.policies.toNumber(), 0);
+      assert.isAbove(p.claimsPaid.toNumber(), 0);
+      assert.isAbove(p.claimsDenied.toNumber(), 0);
+    });
+  });
+
 });

@@ -125,6 +125,13 @@ export function policyPda(holder: PublicKey, nonce: bigint): PublicKey {
     PROGRAM_ID
   )[0];
 }
+/** Where a claim's attestations are counted. Opened by file_claim. */
+export function tallyPda(policy: PublicKey): PublicKey {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("tally"), policy.toBuffer()],
+    PROGRAM_ID
+  )[0];
+}
 
 /* ---------------------------------------------------------------- */
 /* instructions                                                      */
@@ -163,6 +170,13 @@ export function buyCoverIx(params: {
   });
 }
 
+/**
+ * File a claim, which also opens the account its attestations are counted in.
+ *
+ * The holder is writable because they pay that account's rent. Filing is the
+ * right moment to create it: attesting then stays a pure vote, and an operator
+ * never pays for a claim it did not make.
+ */
 export function fileClaimIx(
   holder: PublicKey,
   policy: PublicKey
@@ -170,8 +184,10 @@ export function fileClaimIx(
   return new TransactionInstruction({
     programId: PROGRAM_ID,
     keys: [
-      { pubkey: holder, isSigner: true, isWritable: false },
+      { pubkey: holder, isSigner: true, isWritable: true },
       { pubkey: policy, isSigner: false, isWritable: true },
+      { pubkey: tallyPda(policy), isSigner: false, isWritable: true },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     ],
     data: Buffer.from(Uint8Array.from(IX_FILE_CLAIM)),
   });

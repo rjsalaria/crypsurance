@@ -14,6 +14,205 @@ export type Protocol = {
   },
   "instructions": [
     {
+      "name": "attestClaim",
+      "docs": [
+        "One operator's verdict on a claim.",
+        "",
+        "The Attestation PDA is keyed by (policy, operator), so an operator",
+        "cannot vote twice — the second attempt collides with an account that",
+        "already exists, before any of our logic runs."
+      ],
+      "discriminator": [
+        155,
+        101,
+        33,
+        39,
+        9,
+        31,
+        214,
+        107
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "operator"
+          ]
+        },
+        {
+          "name": "pool",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "registry",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "operator",
+          "docs": [
+            "Seeds bind this to the signer, so an operator can only ever attest as",
+            "itself — there is no account it could name to vote as someone else."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  112,
+                  101,
+                  114,
+                  97,
+                  116,
+                  111,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        },
+        {
+          "name": "policy",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "policy.holder",
+                "account": "policy"
+              },
+              {
+                "kind": "account",
+                "path": "policy.nonce",
+                "account": "policy"
+              }
+            ]
+          }
+        },
+        {
+          "name": "tally",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  97,
+                  108,
+                  108,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "policy"
+              }
+            ]
+          }
+        },
+        {
+          "name": "attestation",
+          "docs": [
+            "One per (policy, operator). A second vote collides with an account that",
+            "already exists, so double-voting is impossible by construction."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  116,
+                  116,
+                  101,
+                  115,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "policy"
+              },
+              {
+                "kind": "account",
+                "path": "operator"
+              }
+            ]
+          }
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "approved",
+          "type": "bool"
+        },
+        {
+          "name": "basis",
+          "type": "string"
+        }
+      ]
+    },
+    {
       "name": "buyCover",
       "docs": [
         "Buy cover. The premium is derived from the payout here rather than",
@@ -294,14 +493,10 @@ export type Protocol = {
       "accounts": [
         {
           "name": "oracle",
-          "docs": [
-            "Only the pool's designated oracle may assess a claim."
-          ],
           "signer": true
         },
         {
           "name": "pool",
-          "writable": true,
           "pda": {
             "seeds": [
               {
@@ -344,39 +539,6 @@ export type Protocol = {
               }
             ]
           }
-        },
-        {
-          "name": "vault",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  118,
-                  97,
-                  117,
-                  108,
-                  116
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "pool"
-              }
-            ]
-          }
-        },
-        {
-          "name": "holderToken",
-          "docs": [
-            "Must belong to the policy holder — the oracle cannot redirect a payout."
-          ],
-          "writable": true
-        },
-        {
-          "name": "tokenProgram",
-          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         }
       ],
       "args": [
@@ -390,7 +552,12 @@ export type Protocol = {
       "name": "fileClaim",
       "docs": [
         "Ask for the claim to be assessed. Only the holder can do this, and only",
-        "on a policy that hasn't already been claimed or settled."
+        "on a policy that hasn't already been claimed or settled.",
+        "",
+        "Also opens the claim's tally. Counting attestations there rather than on",
+        "the Policy is deliberate: policies are already live on devnet at a fixed",
+        "size, and adding fields to that account would leave every existing one",
+        "unreadable. Nothing about M2's state layout moves."
       ],
       "discriminator": [
         187,
@@ -405,6 +572,7 @@ export type Protocol = {
       "accounts": [
         {
           "name": "holder",
+          "writable": true,
           "signer": true,
           "relations": [
             "policy"
@@ -437,6 +605,36 @@ export type Protocol = {
               }
             ]
           }
+        },
+        {
+          "name": "tally",
+          "docs": [
+            "Opened here so attesting never has to create it, which keeps the",
+            "operator's instruction a pure vote."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  97,
+                  108,
+                  108,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "policy"
+              }
+            ]
+          }
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
         }
       ],
       "args": []
@@ -914,9 +1112,13 @@ export type Protocol = {
     {
       "name": "settleClaim",
       "docs": [
-        "Oracle verdict. `approved` pays the full payout from the vault to the",
-        "holder; otherwise the claim is denied. The oracle cannot choose the",
-        "recipient or the amount — both come from the policy account."
+        "Settle a claim once enough operators agree.",
+        "",
+        "Deliberately permissionless: the signer pays the transaction fee and",
+        "nothing else, and no key is checked against anything. Whether a claim",
+        "pays is decided by counting attestations, not by whoever submits this.",
+        "The payout destination is still fixed to the policy's own holder, which",
+        "is the one property that has not moved since M2."
       ],
       "discriminator": [
         205,
@@ -930,9 +1132,10 @@ export type Protocol = {
       ],
       "accounts": [
         {
-          "name": "oracle",
+          "name": "cranker",
           "docs": [
-            "Only the pool's designated oracle may assess a claim."
+            "Pays the fee. Nothing is checked about this key — that is the point of",
+            "the milestone. Settlement is decided by the tally, not the signer."
           ],
           "signer": true
         },
@@ -949,6 +1152,30 @@ export type Protocol = {
                   111,
                   108
                 ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "registry",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
               }
             ]
           }
@@ -983,6 +1210,27 @@ export type Protocol = {
           }
         },
         {
+          "name": "tally",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  97,
+                  108,
+                  108,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "policy"
+              }
+            ]
+          }
+        },
+        {
           "name": "vault",
           "writable": true,
           "pda": {
@@ -1007,7 +1255,8 @@ export type Protocol = {
         {
           "name": "holderToken",
           "docs": [
-            "Must belong to the policy holder — the oracle cannot redirect a payout."
+            "Must belong to the policy holder. Unchanged from M2, and the reason a",
+            "wrong verdict still cannot become a redirected payout."
           ],
           "writable": true
         },
@@ -1016,19 +1265,36 @@ export type Protocol = {
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         }
       ],
-      "args": [
-        {
-          "name": "approved",
-          "type": "bool"
-        },
-        {
-          "name": "basis",
-          "type": "string"
-        }
-      ]
+      "args": []
     }
   ],
   "accounts": [
+    {
+      "name": "attestation",
+      "discriminator": [
+        152,
+        125,
+        183,
+        86,
+        36,
+        146,
+        121,
+        73
+      ]
+    },
+    {
+      "name": "claimTally",
+      "discriminator": [
+        198,
+        130,
+        18,
+        132,
+        221,
+        255,
+        40,
+        67
+      ]
+    },
     {
       "name": "operator",
       "discriminator": [
@@ -1083,6 +1349,19 @@ export type Protocol = {
     }
   ],
   "events": [
+    {
+      "name": "claimAttested",
+      "discriminator": [
+        220,
+        101,
+        75,
+        125,
+        149,
+        62,
+        158,
+        88
+      ]
+    },
     {
       "name": "claimEscalated",
       "discriminator": [
@@ -1242,9 +1521,88 @@ export type Protocol = {
       "code": 6015,
       "name": "notOperator",
       "msg": "Signer is not this operator"
+    },
+    {
+      "code": 6016,
+      "name": "thresholdNotMet",
+      "msg": "Not enough operators have agreed to settle this claim"
+    },
+    {
+      "code": 6017,
+      "name": "operatorInactive",
+      "msg": "Operator is not active"
     }
   ],
   "types": [
+    {
+      "name": "attestation",
+      "docs": [
+        "One operator's signed verdict on one claim.",
+        "",
+        "Kept after settlement rather than closed: week 3 compares it against the",
+        "outcome to decide whether that operator is credited or slashed."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "policy",
+            "type": "pubkey"
+          },
+          {
+            "name": "operator",
+            "type": "pubkey"
+          },
+          {
+            "name": "approved",
+            "type": "bool"
+          },
+          {
+            "name": "basis",
+            "type": "string"
+          },
+          {
+            "name": "createdAt",
+            "type": "i64"
+          },
+          {
+            "name": "resolved",
+            "docs": [
+              "Set once week 3 has judged it, so stake accounting cannot double-count."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "claimAttested",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "policy",
+            "type": "pubkey"
+          },
+          {
+            "name": "operator",
+            "type": "pubkey"
+          },
+          {
+            "name": "approved",
+            "type": "bool"
+          },
+          {
+            "name": "basis",
+            "type": "string"
+          }
+        ]
+      }
+    },
     {
       "name": "claimEscalated",
       "type": {
@@ -1301,6 +1659,51 @@ export type Protocol = {
           {
             "name": "basis",
             "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "claimTally",
+      "docs": [
+        "Running count of a single claim's attestations.",
+        "",
+        "Separate from `Policy` because policies are already live on devnet at a",
+        "fixed size — appending fields there would leave every existing one",
+        "undeserializable."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "policy",
+            "type": "pubkey"
+          },
+          {
+            "name": "approvals",
+            "type": "u8"
+          },
+          {
+            "name": "denials",
+            "type": "u8"
+          },
+          {
+            "name": "openedAt",
+            "docs": [
+              "When the claim was filed — week 3 measures the dispute window from here."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "basis",
+            "docs": [
+              "The most recently recorded reason, shown to the holder as evidence."
+            ],
+            "type": "string"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
           }
         ]
       }

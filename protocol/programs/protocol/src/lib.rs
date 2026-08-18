@@ -266,6 +266,11 @@ pub mod protocol {
 
     /// Ask for the claim to be assessed. Only the holder can do this, and only
     /// on a policy that hasn't already been claimed or settled.
+    ///
+    /// Also opens the claim's tally. Counting attestations there rather than on
+    /// the Policy is deliberate: policies are already live on devnet at a fixed
+    /// size, and adding fields to that account would leave every existing one
+    /// unreadable. Nothing about M2's state layout moves.
     pub fn file_claim(ctx: Context<FileClaim>) -> Result<()> {
         let policy = &mut ctx.accounts.policy;
         require!(
@@ -274,6 +279,14 @@ pub mod protocol {
         );
         policy.status = PolicyStatus::Requested;
 
+        let tally = &mut ctx.accounts.tally;
+        tally.policy = policy.key();
+        tally.approvals = 0;
+        tally.denials = 0;
+        tally.opened_at = Clock::get()?.unix_timestamp;
+        tally.basis = String::new();
+        tally.bump = ctx.bumps.tally;
+
         emit!(ClaimFiled {
             policy: policy.key(),
             holder: policy.holder,
@@ -281,16 +294,76 @@ pub mod protocol {
         Ok(())
     }
 
-    /// Oracle verdict. `approved` pays the full payout from the vault to the
-    /// holder; otherwise the claim is denied. The oracle cannot choose the
-    /// recipient or the amount — both come from the policy account.
-    pub fn settle_claim(ctx: Context<SettleClaim>, approved: bool, basis: String) -> Result<()> {
+    /// One operator's verdict on a claim.
+    ///
+    /// The Attestation PDA is keyed by (policy, operator), so an operator
+    /// cannot vote twice — the second attempt collides with an account that
+    /// already exists, before any of our logic runs.
+    pub fn attest_claim(ctx: Context<AttestClaim>, approved: bool, basis: String) -> Result<()> {
         require!(basis.len() <= 64, CoverError::BasisTooLong);
         require!(
             ctx.accounts.policy.status == PolicyStatus::Requested
                 || ctx.accounts.policy.status == PolicyStatus::Escalated,
             CoverError::NotSettleable
         );
+        require!(ctx.accounts.operator.active, CoverError::OperatorInactive);
+        require!(
+            ctx.accounts.operator.stake >= ctx.accounts.registry.min_stake,
+            CoverError::StakeBelowMinimum
+        );
+
+        let attestation = &mut ctx.accounts.attestation;
+        attestation.policy = ctx.accounts.policy.key();
+        attestation.operator = ctx.accounts.operator.key();
+        attestation.approved = approved;
+        attestation.basis = basis.clone();
+        attestation.created_at = Clock::get()?.unix_timestamp;
+        attestation.resolved = false;
+        attestation.bump = ctx.bumps.attestation;
+
+        let tally = &mut ctx.accounts.tally;
+        if approved {
+            tally.approvals = tally.approvals.saturating_add(1);
+        } else {
+            tally.denials = tally.denials.saturating_add(1);
+        }
+        // The evidence shown to the holder is the most recent one recorded.
+        tally.basis = basis.clone();
+
+        // Counted against the operator until week 3 judges it. This is what
+        // stops an operator voting and then withdrawing its stake before the
+        // verdict lands.
+        let operator = &mut ctx.accounts.operator;
+        operator.attestations = operator.attestations.saturating_add(1);
+        operator.pending = operator.pending.saturating_add(1);
+
+        emit!(ClaimAttested {
+            policy: attestation.policy,
+            operator: operator.authority,
+            approved,
+            basis,
+        });
+        Ok(())
+    }
+
+    /// Settle a claim once enough operators agree.
+    ///
+    /// Deliberately permissionless: the signer pays the transaction fee and
+    /// nothing else, and no key is checked against anything. Whether a claim
+    /// pays is decided by counting attestations, not by whoever submits this.
+    /// The payout destination is still fixed to the policy's own holder, which
+    /// is the one property that has not moved since M2.
+    pub fn settle_claim(ctx: Context<SettleClaim>) -> Result<()> {
+        require!(
+            ctx.accounts.policy.status == PolicyStatus::Requested
+                || ctx.accounts.policy.status == PolicyStatus::Escalated,
+            CoverError::NotSettleable
+        );
+
+        let threshold = ctx.accounts.registry.threshold;
+        let approved = ctx.accounts.tally.approvals >= threshold;
+        let denied = ctx.accounts.tally.denials >= threshold;
+        require!(approved || denied, CoverError::ThresholdNotMet);
 
         if approved {
             let payout = to_base_units(ctx.accounts.policy.payout, ctx.accounts.pool.decimals)?;
@@ -299,7 +372,6 @@ pub mod protocol {
                 CoverError::PoolUnderfunded
             );
 
-            // The vault's authority is the pool PDA, so the program signs.
             let pool_bump = ctx.accounts.pool.bump;
             let seeds: &[&[u8]] = &[b"pool", core::slice::from_ref(&pool_bump)];
             token::transfer(
@@ -316,6 +388,7 @@ pub mod protocol {
             )?;
         }
 
+        let basis = ctx.accounts.tally.basis.clone();
         let policy = &mut ctx.accounts.policy;
         policy.status = if approved {
             PolicyStatus::Paid
@@ -325,9 +398,9 @@ pub mod protocol {
         policy.settled_at = Clock::get()?.unix_timestamp;
         policy.basis = basis.clone();
 
-        let policy_key = policy.key();
-        let holder_key = policy.holder;
         let amount = if approved { policy.payout } else { 0 };
+        let policy_key = policy.key();
+        let holder = policy.holder;
 
         let pool = &mut ctx.accounts.pool;
         if approved {
@@ -338,7 +411,7 @@ pub mod protocol {
 
         emit!(ClaimSettled {
             policy: policy_key,
-            holder: holder_key,
+            holder,
             approved,
             amount,
             basis,
@@ -348,7 +421,7 @@ pub mod protocol {
 
     /// The data was inconclusive: hand the claim to human verification rather
     /// than guessing. It stays settleable afterwards.
-    pub fn escalate_claim(ctx: Context<SettleClaim>, reason: String) -> Result<()> {
+    pub fn escalate_claim(ctx: Context<EscalateClaim>, reason: String) -> Result<()> {
         require!(reason.len() <= 64, CoverError::BasisTooLong);
         let policy = &mut ctx.accounts.policy;
         require!(
@@ -384,6 +457,43 @@ pub struct Pool {
     pub claims_denied: u64,
     pub bump: u8,
     pub vault_bump: u8,
+}
+
+/// Running count of a single claim's attestations.
+///
+/// Separate from `Policy` because policies are already live on devnet at a
+/// fixed size — appending fields there would leave every existing one
+/// undeserializable.
+#[account]
+#[derive(InitSpace)]
+pub struct ClaimTally {
+    pub policy: Pubkey,
+    pub approvals: u8,
+    pub denials: u8,
+    /// When the claim was filed — week 3 measures the dispute window from here.
+    pub opened_at: i64,
+    /// The most recently recorded reason, shown to the holder as evidence.
+    #[max_len(64)]
+    pub basis: String,
+    pub bump: u8,
+}
+
+/// One operator's signed verdict on one claim.
+///
+/// Kept after settlement rather than closed: week 3 compares it against the
+/// outcome to decide whether that operator is credited or slashed.
+#[account]
+#[derive(InitSpace)]
+pub struct Attestation {
+    pub policy: Pubkey,
+    pub operator: Pubkey,
+    pub approved: bool,
+    #[max_len(64)]
+    pub basis: String,
+    pub created_at: i64,
+    /// Set once week 3 has judged it, so stake accounting cannot double-count.
+    pub resolved: bool,
+    pub bump: u8,
 }
 
 /// Consensus configuration and the operator roll-call.
@@ -666,6 +776,7 @@ pub struct BuyCover<'info> {
 
 #[derive(Accounts)]
 pub struct FileClaim<'info> {
+    #[account(mut)]
     pub holder: Signer<'info>,
 
     #[account(
@@ -675,16 +786,44 @@ pub struct FileClaim<'info> {
         has_one = holder @ CoverError::NotPolicyHolder
     )]
     pub policy: Account<'info, Policy>,
+
+    /// Opened here so attesting never has to create it, which keeps the
+    /// operator's instruction a pure vote.
+    #[account(
+        init,
+        payer = holder,
+        space = 8 + ClaimTally::INIT_SPACE,
+        seeds = [b"tally", policy.key().as_ref()],
+        bump
+    )]
+    pub tally: Account<'info, ClaimTally>,
+
+    pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
-pub struct SettleClaim<'info> {
-    /// Only the pool's designated oracle may assess a claim.
-    #[account(constraint = oracle.key() == pool.oracle @ CoverError::NotOracle)]
-    pub oracle: Signer<'info>,
+pub struct AttestClaim<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
 
-    #[account(mut, seeds = [b"pool"], bump = pool.bump)]
+    #[account(seeds = [b"pool"], bump = pool.bump)]
     pub pool: Account<'info, Pool>,
+
+    #[account(
+        seeds = [b"registry", pool.key().as_ref()],
+        bump = registry.bump
+    )]
+    pub registry: Account<'info, Registry>,
+
+    /// Seeds bind this to the signer, so an operator can only ever attest as
+    /// itself — there is no account it could name to vote as someone else.
+    #[account(
+        mut,
+        seeds = [b"operator", pool.key().as_ref(), authority.key().as_ref()],
+        bump = operator.bump,
+        has_one = authority @ CoverError::NotOperator
+    )]
+    pub operator: Account<'info, Operator>,
 
     #[account(
         mut,
@@ -695,12 +834,62 @@ pub struct SettleClaim<'info> {
 
     #[account(
         mut,
+        seeds = [b"tally", policy.key().as_ref()],
+        bump = tally.bump
+    )]
+    pub tally: Account<'info, ClaimTally>,
+
+    /// One per (policy, operator). A second vote collides with an account that
+    /// already exists, so double-voting is impossible by construction.
+    #[account(
+        init,
+        payer = authority,
+        space = 8 + Attestation::INIT_SPACE,
+        seeds = [b"attest", policy.key().as_ref(), operator.key().as_ref()],
+        bump
+    )]
+    pub attestation: Account<'info, Attestation>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct SettleClaim<'info> {
+    /// Pays the fee. Nothing is checked about this key — that is the point of
+    /// the milestone. Settlement is decided by the tally, not the signer.
+    pub cranker: Signer<'info>,
+
+    #[account(mut, seeds = [b"pool"], bump = pool.bump)]
+    pub pool: Account<'info, Pool>,
+
+    #[account(
+        seeds = [b"registry", pool.key().as_ref()],
+        bump = registry.bump
+    )]
+    pub registry: Account<'info, Registry>,
+
+    #[account(
+        mut,
+        seeds = [b"policy", policy.holder.as_ref(), &policy.nonce.to_le_bytes()],
+        bump = policy.bump
+    )]
+    pub policy: Account<'info, Policy>,
+
+    #[account(
+        seeds = [b"tally", policy.key().as_ref()],
+        bump = tally.bump
+    )]
+    pub tally: Account<'info, ClaimTally>,
+
+    #[account(
+        mut,
         seeds = [b"vault", pool.key().as_ref()],
         bump = pool.vault_bump
     )]
     pub vault: Account<'info, TokenAccount>,
 
-    /// Must belong to the policy holder — the oracle cannot redirect a payout.
+    /// Must belong to the policy holder. Unchanged from M2, and the reason a
+    /// wrong verdict still cannot become a redirected payout.
     #[account(
         mut,
         constraint = holder_token.owner == policy.holder @ CoverError::WrongTokenOwner,
@@ -709,6 +898,25 @@ pub struct SettleClaim<'info> {
     pub holder_token: Account<'info, TokenAccount>,
 
     pub token_program: Program<'info, Token>,
+}
+
+/// Escalation stays an oracle action for now. It cannot pay anyone — it only
+/// routes a claim to human verification — and week 3 replaces it with a
+/// deadline anyone can trigger.
+#[derive(Accounts)]
+pub struct EscalateClaim<'info> {
+    #[account(constraint = oracle.key() == pool.oracle @ CoverError::NotOracle)]
+    pub oracle: Signer<'info>,
+
+    #[account(seeds = [b"pool"], bump = pool.bump)]
+    pub pool: Account<'info, Pool>,
+
+    #[account(
+        mut,
+        seeds = [b"policy", policy.holder.as_ref(), &policy.nonce.to_le_bytes()],
+        bump = policy.bump
+    )]
+    pub policy: Account<'info, Policy>,
 }
 
 /* ------------------------------------------------------------------ */
@@ -744,6 +952,14 @@ pub struct ClaimSettled {
 pub struct ClaimEscalated {
     pub policy: Pubkey,
     pub reason: String,
+}
+
+#[event]
+pub struct ClaimAttested {
+    pub policy: Pubkey,
+    pub operator: Pubkey,
+    pub approved: bool,
+    pub basis: String,
 }
 
 #[event]
@@ -793,4 +1009,8 @@ pub enum CoverError {
     OperatorHasPendingAttestations,
     #[msg("Signer is not this operator")]
     NotOperator,
+    #[msg("Not enough operators have agreed to settle this claim")]
+    ThresholdNotMet,
+    #[msg("Operator is not active")]
+    OperatorInactive,
 }

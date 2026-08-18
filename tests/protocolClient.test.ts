@@ -27,6 +27,7 @@ import {
   decodePolicy,
   fileClaimIx,
   policyPda,
+  tallyPda,
   poolPda,
   vaultPda,
 } from "../components/protocolClient.ts";
@@ -97,6 +98,26 @@ test("buy_cover carries the discriminator Anchor derives from its name", () => {
 test("file_claim is the bare discriminator, no args", () => {
   const ix = fileClaimIx(KEY_A, KEY_A);
   assert.deepEqual(new Uint8Array(ix.data), disc("global:file_claim"));
+});
+
+test("file_claim opens the claim's tally, paid for by the holder", () => {
+  const policy = policyPda(KEY_A, 9n);
+  const ix = fileClaimIx(KEY_A, policy);
+
+  assert.deepEqual(
+    ix.keys.map((k) => k.pubkey.toBase58()),
+    [
+      KEY_A.toBase58(),
+      policy.toBase58(),
+      tallyPda(policy).toBase58(),
+      "11111111111111111111111111111111", // system program
+    ],
+    "account order must match the program's FileClaim context"
+  );
+  // the holder pays the tally's rent, so their account has to be writable
+  assert.ok(ix.keys[0].isWritable, "holder must be writable to pay rent");
+  assert.ok(ix.keys[0].isSigner, "holder signs");
+  assert.ok(ix.keys[2].isWritable, "the tally is being created");
 });
 
 test("buy_cover args serialize as Borsh in the program's parameter order", () => {
