@@ -24,3 +24,10 @@ wallet = "~/.config/solana/id.json"
 
 [scripts]
 test = "npx ts-mocha -p ./tsconfig.json -t 1000000 \"tests/**/*.ts\""
+
+[test]
+# The ledger is written under /mnt/d, i.e. the Windows filesystem through WSL's
+# translation layer, where opening the blockstore alone takes ~4s. Anchor's
+# default 5s startup wait loses the race and reports "Test validator does not
+# look started" when the validator is merely slow.
+startup_wait = 30000
