@@ -16,7 +16,7 @@ import {
   PublicKey,
   Transaction,
 } from "@solana/web3.js";
-import { getAssociatedTokenAddress } from "@solana/spl-token";
+import { getAssociatedTokenAddressSync } from "@solana/spl-token";
 import "@solana/wallet-adapter-react-ui/styles.css";
 import PolicyCertificate from "./PolicyCertificate";
 import {
@@ -26,6 +26,7 @@ import {
   withWalletTimeout,
 } from "./chainClient";
 import { buyCoverIx, fetchPolicies, fileClaimIx, policyPda } from "./protocolClient";
+import { FUNDED_EVENT } from "./events";
 
 /** The real SURETY devnet mint created by solana/create-token.js. */
 const SURETY_MINT = new PublicKey(
@@ -55,6 +56,28 @@ function useBalances(refreshKey: number) {
   const [sol, setSol] = useState<number | null>(null);
   const [surety, setSurety] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  const [tick, setTick] = useState(0);
+
+  // These balances change without anyone touching this component: the faucet
+  // credits SURETY, and the oracle pays claims straight into the wallet. Until
+  // this existed the only way to see either was to disconnect and reconnect,
+  // which is a bug report waiting to happen and looked broken on camera.
+  useEffect(() => {
+    const bump = () => setTick((t) => t + 1);
+    const timers: number[] = [];
+    const onFunded = () => {
+      bump();
+      // the drip may still be confirming when the worker replies
+      timers.push(window.setTimeout(bump, 5_000));
+    };
+    window.addEventListener(FUNDED_EVENT, onFunded);
+    const poll = window.setInterval(bump, 20_000);
+    return () => {
+      window.removeEventListener(FUNDED_EVENT, onFunded);
+      clearInterval(poll);
+      timers.forEach(clearTimeout);
+    };
+  }, []);
 
   useEffect(() => {
     // No wallet, nothing to read. Disconnecting is handled where these are
@@ -93,7 +116,7 @@ function useBalances(refreshKey: number) {
     return () => {
       cancelled = true;
     };
-  }, [publicKey, connection, refreshKey]);
+  }, [publicKey, connection, refreshKey, tick]);
 
   // A disconnected wallet has no balances, rather than the last one's.
   return {
@@ -147,7 +170,13 @@ function BuyCover({
       // The premium is recomputed on-chain from the payout, so what the UI
       // shows is a preview, not an input the program trusts.
       const nonce = BigInt(Date.now());
-      const holderToken = await getAssociatedTokenAddress(SURETY_MINT, publicKey);
+      // Derived synchronously on purpose. Awaiting anything between the click
+      // and sendTransaction ends the browser's user-activation window, and
+      // Phantom's approval popup is then suppressed — the button appears to do
+      // nothing. The async form of this call returns a promise for what is
+      // pure address arithmetic, so awaiting it bought nothing and cost the
+      // prompt. Keep every await in this function *after* sendTransaction.
+      const holderToken = getAssociatedTokenAddressSync(SURETY_MINT, publicKey);
       const policyAddress = policyPda(publicKey, nonce);
 
       const tx = new Transaction().add(

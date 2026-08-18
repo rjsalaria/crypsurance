@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { FUNDED_EVENT } from "./events";
 
 /**
  * URL of the deployed faucet Worker (see faucet-worker/README.md).
@@ -52,6 +53,12 @@ export default function Faucet() {
         `Sent ${(data.amount ?? 0).toLocaleString("en-US")} SURETY${
           data.confirmed ? "" : " — confirming on-chain…"
         }`
+      );
+      // Tell the wallet panel to re-read. It's a sibling component with no
+      // shared state, and before this the tokens only appeared after a
+      // disconnect and reconnect.
+      window.dispatchEvent(
+        new CustomEvent(FUNDED_EVENT, { detail: { address: trimmed } })
       );
     } catch {
       setState("error");
