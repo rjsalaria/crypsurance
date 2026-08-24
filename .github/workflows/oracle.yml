@@ -12,7 +12,16 @@ name: CrypSurance Claims Oracle
 # on average and skipped enough that real gaps reached 224 minutes. The public
 # run history is the honest record of when it actually ran.
 #
+# Since M3 week 2 a claim needs the registry's threshold of operators to agree
+# before it settles, so ONE operator running here would leave every claim stuck
+# at 1-of-2 forever. This job therefore runs the same script once per operator
+# key it has been given. They are separate processes but not yet separate
+# hosts or separate keystores -- that independence is week 4's work, and it
+# should not be described as decentralised until then.
+#
 # Required secrets: DEVNET_KEYPAIR (the oracle key), AVIATIONSTACK_KEY.
+# Optional: OPERATOR_A_KEYPAIR, OPERATOR_B_KEYPAIR -- additional registered
+# operators. Without at least one of them, nothing reaches the threshold.
 # RPC_URL is deliberately NOT used: Helius cannot serve the account reads this
 # needs, so the default public RPC is correct here.
 
@@ -39,15 +48,43 @@ jobs:
         working-directory: protocol
         run: npm install --no-audit --no-fund
 
-      - name: Write oracle keypair from secret
+      # Each operator attests in its own run of the script. The last one to
+      # push the tally past the threshold also cranks settlement -- any of them
+      # can, because settle_claim checks no key at all.
+      - name: Attest as the oracle operator
         working-directory: protocol
-        run: printf '%s' "$DEVNET_KEYPAIR" > oracle-key.json
+        run: |
+          printf '%s' "$DEVNET_KEYPAIR" > op-oracle.json
+          KEYPAIR_PATH=op-oracle.json node scripts/oracle.js
+          rm -f op-oracle.json
         env:
           DEVNET_KEYPAIR: ${{ secrets.DEVNET_KEYPAIR }}
+          AVIATIONSTACK_KEY: ${{ secrets.AVIATIONSTACK_KEY }}
 
-      - name: Settle claims
+      - name: Attest as operator A
         working-directory: protocol
-        run: node scripts/oracle.js
+        run: |
+          if [ -z "$OPERATOR_A_KEYPAIR" ]; then
+            echo "::warning::OPERATOR_A_KEYPAIR is not set — claims will stall below the threshold"
+            exit 0
+          fi
+          printf '%s' "$OPERATOR_A_KEYPAIR" > op-a.json
+          KEYPAIR_PATH=op-a.json node scripts/oracle.js
+          rm -f op-a.json
         env:
-          KEYPAIR_PATH: oracle-key.json
+          OPERATOR_A_KEYPAIR: ${{ secrets.OPERATOR_A_KEYPAIR }}
+          AVIATIONSTACK_KEY: ${{ secrets.AVIATIONSTACK_KEY }}
+
+      - name: Attest as operator B
+        working-directory: protocol
+        run: |
+          if [ -z "$OPERATOR_B_KEYPAIR" ]; then
+            echo "::notice::OPERATOR_B_KEYPAIR is not set — running with fewer operators"
+            exit 0
+          fi
+          printf '%s' "$OPERATOR_B_KEYPAIR" > op-b.json
+          KEYPAIR_PATH=op-b.json node scripts/oracle.js
+          rm -f op-b.json
+        env:
+          OPERATOR_B_KEYPAIR: ${{ secrets.OPERATOR_B_KEYPAIR }}
           AVIATIONSTACK_KEY: ${{ secrets.AVIATIONSTACK_KEY }}

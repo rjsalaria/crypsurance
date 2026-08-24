@@ -93,6 +93,20 @@ spl-token balance 8wAqKooKyqubCG9nNx2bfcq9TQ9jEJxojyhAMAdfsHn9 \
   --owner 9txXv5nFKu4E9AmykbcLGSRiyxM19C81HJqFmJbsBkxy --url devnet
 ```
 
+### The faucet also sends SOL
+
+Since M3 week 2 the faucet drips ~0.02 devnet SOL alongside the tokens, but only
+when the recipient's balance is below that. A wallet holding SURETY and no SOL
+cannot transact at all — fees and the Policy account's rent both need it — and
+sending testers to an external faucet first lost some of them.
+
+Override with the `FAUCET_SOL` var (0 disables it). This spends the faucet
+wallet's own SOL, so watch its balance more closely than before:
+
+```bash
+cd solana && node faucet-status.js
+```
+
 **Refill SOL** (do this when `faucet-status` warns, i.e. below ~0.05 SOL):
 - Easiest: paste the pool address `9txXv5nFKu4E9AmykbcLGSRiyxM19C81HJqFmJbsBkxy`
   into <https://faucet.quicknode.com/solana/devnet>.

@@ -39,6 +39,8 @@ export default function Faucet() {
       const data = (await res.json()) as {
         signature?: string;
         amount?: number;
+        /** devnet SOL sent for fees; 0 when the wallet already had enough */
+        sol?: number;
         confirmed?: boolean;
         error?: string;
       };
@@ -51,8 +53,8 @@ export default function Faucet() {
       setState("done");
       setMessage(
         `Sent ${(data.amount ?? 0).toLocaleString("en-US")} SURETY${
-          data.confirmed ? "" : " — confirming on-chain…"
-        }`
+          data.sol ? ` + ${data.sol} SOL for fees` : ""
+        }${data.confirmed ? "" : " — confirming on-chain…"}`
       );
       // Tell the wallet panel to re-read. It's a sibling component with no
       // shared state, and before this the tokens only appeared after a

@@ -16,7 +16,9 @@
 import {
   Connection,
   Keypair,
+  LAMPORTS_PER_SOL,
   PublicKey,
+  SystemProgram,
   Transaction,
 } from "@solana/web3.js";
 import {
@@ -29,6 +31,16 @@ const SURETY_MINT = new PublicKey(
   "8wAqKooKyqubCG9nNx2bfcq9TQ9jEJxojyhAMAdfsHn9"
 );
 const DECIMALS = 9n;
+
+/**
+ * Devnet SOL sent alongside the tokens.
+ *
+ * Without it a new wallet holds SURETY it cannot spend: every transaction
+ * needs a fee, and buying cover also pays rent for the Policy account. That
+ * sent testers to an external faucet first, and some never came back. 0.02 is
+ * comfortably enough for the whole buy-claim-settle loop.
+ */
+const SOL_DRIP = 0.02;
 
 const ALLOWED_ORIGINS = new Set([
   "https://crypsurance.io",
@@ -168,6 +180,25 @@ async function handle(request, env, origin) {
     )
   );
 
+  // Top up SOL only if they can't already pay their own way, so returning
+  // testers don't drain the faucet's balance on every visit.
+  const solDrip = Number(env.FAUCET_SOL ?? SOL_DRIP);
+  let sentSol = 0;
+  if (solDrip > 0) {
+    const have = await conn.getBalance(recipient);
+    const want = Math.floor(solDrip * LAMPORTS_PER_SOL);
+    if (have < want) {
+      tx.add(
+        SystemProgram.transfer({
+          fromPubkey: payer.publicKey,
+          toPubkey: recipient,
+          lamports: want - have,
+        })
+      );
+      sentSol = (want - have) / LAMPORTS_PER_SOL;
+    }
+  }
+
   const { blockhash } = await conn.getLatestBlockhash("confirmed");
   tx.recentBlockhash = blockhash;
   tx.feePayer = payer.publicKey;
@@ -208,7 +239,7 @@ async function handle(request, env, origin) {
     }
   }
 
-  return json({ signature, amount: amountUi, confirmed }, 200, origin);
+  return json({ signature, amount: amountUi, sol: sentSol, confirmed }, 200, origin);
 }
 
 /**

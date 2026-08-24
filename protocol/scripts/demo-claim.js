@@ -77,7 +77,15 @@ const MINT = new PublicKey("8wAqKooKyqubCG9nNx2bfcq9TQ9jEJxojyhAMAdfsHn9");
 
   const claimSig = await program.methods
     .fileClaim()
-    .accountsPartial({ holder: holder.publicKey, policy })
+    .accountsPartial({
+      holder: holder.publicKey,
+      policy,
+      tally: PublicKey.findProgramAddressSync(
+        [Buffer.from("tally"), policy.toBuffer()],
+        program.programId
+      )[0],
+      systemProgram: SystemProgram.programId,
+    })
     .rpc();
   console.log("filed claim");
   console.log("  tx    :", claimSig);

@@ -175,8 +175,10 @@ export default function DevnetPage() {
               <div>
                 <p className="font-semibold">Get free devnet SOL</p>
                 <p className="mt-1 text-muted">
-                  faucet.quicknode.com/solana/devnet — connect Phantom, request.
-                  It&apos;s play money for testing; it costs and is worth nothing.
+                  Our faucet below sends a little SOL along with your SURETY, so
+                  usually you can skip this. If you need more:
+                  faucet.quicknode.com/solana/devnet. It&apos;s play money;
+                  it costs and is worth nothing.
                 </p>
               </div>
             </li>
