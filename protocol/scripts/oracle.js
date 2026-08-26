@@ -38,7 +38,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const anchor = require("@coral-xyz/anchor");
-const { makeConnection } = require("./rpc");
+const { makeConnection, retryingFetch } = require("./rpc");
 const { PublicKey, Keypair, SystemProgram } = require("@solana/web3.js");
 const { getAssociatedTokenAddress, TOKEN_PROGRAM_ID } = require("@solana/spl-token");
 
@@ -75,7 +75,18 @@ async function verifyFlight(flight, date, apiKey) {
   // Free tier rejects the flight_date param, so query by flight number and
   // match the date here.
   const url = `https://api.aviationstack.com/v1/flights?access_key=${apiKey}&flight_iata=${encodeURIComponent(flight)}`;
-  const j = await (await fetch(url)).json();
+  let j;
+  try {
+    j = await (await retryingFetch(url)).json();
+  } catch (e) {
+    // A flight lookup that cannot complete is not a verdict — but it is also
+    // not a reason to abandon the run. Everything this operator could have
+    // attested to would stall along with it, for the half hour until the next
+    // scheduled run. The API sits behind Cloudflare, so a throttled response
+    // can be an HTML block page that blows up .json() rather than the clean
+    // error envelope handled below.
+    return { skip: true, reason: `flight-data API unreachable: ${e.message}` };
+  }
   if (j?.error) {
     return {
       skip: true,

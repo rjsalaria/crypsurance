@@ -55,8 +55,7 @@ jobs:
         working-directory: protocol
         run: |
           printf '%s' "$DEVNET_KEYPAIR" > op-oracle.json
-          KEYPAIR_PATH=op-oracle.json node scripts/oracle.js
-          rm -f op-oracle.json
+          bash scripts/attest.sh "oracle operator" op-oracle.json
         env:
           DEVNET_KEYPAIR: ${{ secrets.DEVNET_KEYPAIR }}
           AVIATIONSTACK_KEY: ${{ secrets.AVIATIONSTACK_KEY }}
@@ -69,8 +68,7 @@ jobs:
             exit 0
           fi
           printf '%s' "$OPERATOR_A_KEYPAIR" > op-a.json
-          KEYPAIR_PATH=op-a.json node scripts/oracle.js
-          rm -f op-a.json
+          bash scripts/attest.sh "operator A" op-a.json
         env:
           OPERATOR_A_KEYPAIR: ${{ secrets.OPERATOR_A_KEYPAIR }}
           AVIATIONSTACK_KEY: ${{ secrets.AVIATIONSTACK_KEY }}
@@ -83,8 +81,7 @@ jobs:
             exit 0
           fi
           printf '%s' "$OPERATOR_B_KEYPAIR" > op-b.json
-          KEYPAIR_PATH=op-b.json node scripts/oracle.js
-          rm -f op-b.json
+          bash scripts/attest.sh "operator B" op-b.json
         env:
           OPERATOR_B_KEYPAIR: ${{ secrets.OPERATOR_B_KEYPAIR }}
           AVIATIONSTACK_KEY: ${{ secrets.AVIATIONSTACK_KEY }}
