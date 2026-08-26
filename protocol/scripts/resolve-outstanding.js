@@ -13,8 +13,9 @@
 const fs = require("fs");
 const path = require("path");
 const anchor = require("@coral-xyz/anchor");
-const { PublicKey, Keypair, Connection } = require("@solana/web3.js");
+const { PublicKey, Keypair } = require("@solana/web3.js");
 const { TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync } = require("@solana/spl-token");
+const { makeConnection } = require("./rpc");
 
 const DRY_RUN = process.argv.includes("--dry-run");
 
@@ -31,7 +32,7 @@ const DRY_RUN = process.argv.includes("--dry-run");
       )
     )
   );
-  const connection = new Connection(rpc, "confirmed");
+  const connection = makeConnection(rpc);
   const provider = new anchor.AnchorProvider(connection, new anchor.Wallet(payer), {
     commitment: "confirmed",
   });

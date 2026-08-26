@@ -38,7 +38,8 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const anchor = require("@coral-xyz/anchor");
-const { PublicKey, Keypair, Connection, SystemProgram } = require("@solana/web3.js");
+const { makeConnection } = require("./rpc");
+const { PublicKey, Keypair, SystemProgram } = require("@solana/web3.js");
 const { getAssociatedTokenAddress, TOKEN_PROGRAM_ID } = require("@solana/spl-token");
 
 const SURETY_MINT = new PublicKey("8wAqKooKyqubCG9nNx2bfcq9TQ9jEJxojyhAMAdfsHn9");
@@ -105,7 +106,7 @@ async function verifyFlight(flight, date, apiKey) {
   const me = Keypair.fromSecretKey(
     Uint8Array.from(JSON.parse(fs.readFileSync(kpPath, "utf8")))
   );
-  const connection = new Connection(rpc, "confirmed");
+  const connection = makeConnection(rpc);
   const provider = new anchor.AnchorProvider(connection, new anchor.Wallet(me), {
     commitment: "confirmed",
   });
