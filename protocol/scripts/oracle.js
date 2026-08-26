@@ -127,6 +127,9 @@ async function verifyFlight(flight, date, apiKey) {
     pool.toBuffer(),
     me.publicKey.toBuffer(),
   ]);
+  // the account a correct verdict is paid into — the same one the stake came
+  // from, created when this key registered
+  const myAta = await getAssociatedTokenAddress(SURETY_MINT, me.publicKey);
 
   const op = await connection.getAccountInfo(operatorAccount);
   if (!op) {
@@ -328,6 +331,8 @@ async function verifyFlight(flight, date, apiKey) {
         operator: operatorAccount,
         stakeVault,
         vault,
+        // where a correct verdict gets paid: our own token account
+        operatorToken: myAta,
         tokenProgram: TOKEN_PROGRAM_ID,
       })
       .rpc();

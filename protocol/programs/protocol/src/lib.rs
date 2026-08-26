@@ -501,11 +501,14 @@ pub mod protocol {
         dispute_window: i64,
         commit_window: i64,
         reveal_window: i64,
+        reward_bps: u16,
     ) -> Result<()> {
         require!(slash_bps <= 10_000, CoverError::BadParameter);
+        require!(reward_bps <= 10_000, CoverError::BadParameter);
         require!(dispute_window > 0, CoverError::BadParameter);
 
         let p = &mut ctx.accounts.params;
+        p.reward_bps = reward_bps;
         p.pool = ctx.accounts.pool.key();
         p.authority = ctx.accounts.authority.key();
         p.slash_bps = slash_bps;
@@ -525,15 +528,100 @@ pub mod protocol {
         dispute_window: i64,
         commit_window: i64,
         reveal_window: i64,
+        reward_bps: u16,
     ) -> Result<()> {
         require!(slash_bps <= 10_000, CoverError::BadParameter);
+        require!(reward_bps <= 10_000, CoverError::BadParameter);
         require!(dispute_window > 0, CoverError::BadParameter);
 
         let p = &mut ctx.accounts.params;
+        p.reward_bps = reward_bps;
         p.slash_bps = slash_bps;
         p.dispute_window = dispute_window;
         p.commit_window = commit_window;
         p.reveal_window = reveal_window;
+        Ok(())
+    }
+
+    /// Grow the params account so a newly appended field fits.
+    ///
+    /// Params is already live, and a struct that gained a field is longer than
+    /// the bytes on chain — every instruction that reads it would fail to
+    /// deserialize, which is the whole program. The field is appended at the
+    /// end, so the existing bytes stay exactly where they were and the new one
+    /// lands in freshly zeroed space. Safe precisely because it is append-only:
+    /// reordering or inserting a field could not be migrated this way.
+    ///
+    /// Deliberately does not touch any value. Set the new field afterwards with
+    /// set_params, so a migration and a policy change are never the same
+    /// transaction.
+    pub fn migrate_params(ctx: Context<MigrateParams>) -> Result<()> {
+        let info = ctx.accounts.params.to_account_info();
+        let needed = 8 + Params::INIT_SPACE;
+        let current = info.data_len();
+        require!(current <= needed, CoverError::BadParameter);
+        if current == needed {
+            return Ok(());
+        }
+
+        let rent = Rent::get()?;
+        let top_up = rent
+            .minimum_balance(needed)
+            .saturating_sub(info.lamports());
+        if top_up > 0 {
+            anchor_lang::system_program::transfer(
+                CpiContext::new(
+                    ctx.accounts.system_program.to_account_info(),
+                    anchor_lang::system_program::Transfer {
+                        from: ctx.accounts.authority.to_account_info(),
+                        to: info.clone(),
+                    },
+                ),
+                top_up,
+            )?;
+        }
+        info.resize(needed)?;
+        Ok(())
+    }
+
+    /// Top an operator back up after a slash.
+    ///
+    /// Without this a single wrong verdict is terminal: the slash drops an
+    /// operator below the minimum, it goes inactive, and the only way back is
+    /// to deregister and register again. Operators who cannot recover from one
+    /// bad call are operators who leave.
+    pub fn add_stake(ctx: Context<AddStake>, amount: u64) -> Result<()> {
+        require!(amount > 0, CoverError::BadParameter);
+
+        let base = to_base_units(amount, ctx.accounts.pool.decimals)?;
+        token::transfer(
+            CpiContext::new(
+                ctx.accounts.token_program.to_account_info(),
+                Transfer {
+                    from: ctx.accounts.operator_token.to_account_info(),
+                    to: ctx.accounts.stake_vault.to_account_info(),
+                    authority: ctx.accounts.authority.to_account_info(),
+                },
+            ),
+            base,
+        )?;
+
+        let min_stake = ctx.accounts.registry.min_stake;
+        let operator = &mut ctx.accounts.operator;
+        operator.stake = operator
+            .stake
+            .checked_add(amount)
+            .ok_or(CoverError::MathOverflow)?;
+        // Back above the floor, back in the rotation.
+        if operator.stake >= min_stake {
+            operator.active = true;
+        }
+
+        emit!(StakeAdded {
+            authority: operator.authority,
+            amount,
+            stake: operator.stake,
+        });
         Ok(())
     }
 
@@ -621,6 +709,54 @@ pub mod protocol {
             }
         }
 
+        // Pay the operator for work it got right.
+        //
+        // Slashing alone is not an incentive system: it only punishes. Nobody
+        // rational stakes capital, runs infrastructure and takes slashing risk
+        // for nothing, so without this the operator set can only ever be
+        // people who own the protocol.
+        //
+        // The budget is a share of the premium the holder already paid, split
+        // across the registered set — reward_bps of the premium divided by
+        // operator_count. Dividing by the set size is what bounds it: however
+        // many operators verify a claim, the total paid out cannot exceed that
+        // share of its premium. A per-operator flat fee could quietly outrun
+        // the premium as the set grows.
+        let mut rewarded: u64 = 0;
+        if agreed {
+            let count = ctx.accounts.registry.operator_count.max(1) as u64;
+            let budget = ctx
+                .accounts
+                .policy
+                .premium
+                .checked_mul(ctx.accounts.params.reward_bps as u64)
+                .ok_or(CoverError::MathOverflow)?
+                / BPS_DENOM;
+            rewarded = budget / count;
+
+            let base = to_base_units(rewarded, ctx.accounts.pool.decimals)?;
+            // Never pay a reward out of money owed to policyholders. If the
+            // vault is thin the verdict still stands; the reward is skipped.
+            if base > 0 && ctx.accounts.vault.amount >= base {
+                let pool_bump = ctx.accounts.pool.bump;
+                let seeds: &[&[u8]] = &[b"pool", core::slice::from_ref(&pool_bump)];
+                token::transfer(
+                    CpiContext::new_with_signer(
+                        ctx.accounts.token_program.to_account_info(),
+                        Transfer {
+                            from: ctx.accounts.vault.to_account_info(),
+                            to: ctx.accounts.operator_token.to_account_info(),
+                            authority: ctx.accounts.pool.to_account_info(),
+                        },
+                        &[seeds],
+                    ),
+                    base,
+                )?;
+            } else {
+                rewarded = 0;
+            }
+        }
+
         let min_stake = ctx.accounts.registry.min_stake;
         let operator = &mut ctx.accounts.operator;
         if agreed {
@@ -643,6 +779,7 @@ pub mod protocol {
             operator: operator.authority,
             agreed,
             slashed,
+            rewarded,
         });
         Ok(())
     }
@@ -742,6 +879,10 @@ pub struct Params {
     pub commit_window: i64,
     pub reveal_window: i64,
     pub bump: u8,
+    /// Share of each premium set aside to pay the operators who verified the
+    /// claim, in basis points. Appended after Params was already live, which
+    /// is why migrate_params exists — see the note there before adding more.
+    pub reward_bps: u16,
 }
 
 /// Running count of a single claim's attestations.
@@ -1313,6 +1454,16 @@ pub struct ResolveAttestation<'info> {
     #[account(mut, seeds = [b"vault", pool.key().as_ref()], bump = pool.vault_bump)]
     pub vault: Account<'info, TokenAccount>,
 
+    /// Where a correct operator is paid. Constrained to that operator, so a
+    /// cranker cannot redirect the reward to itself — the same rule the payout
+    /// destination has always followed.
+    #[account(
+        mut,
+        constraint = operator_token.owner == operator.authority @ CoverError::WrongTokenOwner,
+        constraint = operator_token.mint == pool.mint @ CoverError::WrongMint
+    )]
+    pub operator_token: Account<'info, TokenAccount>,
+
     pub token_program: Program<'info, Token>,
 }
 
@@ -1339,6 +1490,56 @@ pub struct EscalateStalled<'info> {
 
     #[account(seeds = [b"tally", policy.key().as_ref()], bump = tally.bump)]
     pub tally: Account<'info, ClaimTally>,
+}
+
+#[derive(Accounts)]
+pub struct MigrateParams<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    #[account(seeds = [b"pool"], bump = pool.bump, has_one = authority)]
+    pub pool: Account<'info, Pool>,
+
+    /// CHECK: deliberately unchecked. The account is too short to deserialize
+    /// as `Params` until it has been resized, which is the entire point of this
+    /// instruction. Its identity is proven by the seeds.
+    #[account(mut, seeds = [b"params", pool.key().as_ref()], bump)]
+    pub params: UncheckedAccount<'info>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct AddStake<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    #[account(seeds = [b"pool"], bump = pool.bump)]
+    pub pool: Account<'info, Pool>,
+
+    #[account(seeds = [b"registry", pool.key().as_ref()], bump = registry.bump)]
+    pub registry: Account<'info, Registry>,
+
+    /// Seeds bind this to the signer: you can only top up your own stake.
+    #[account(
+        mut,
+        seeds = [b"operator", pool.key().as_ref(), authority.key().as_ref()],
+        bump = operator.bump,
+        has_one = authority @ CoverError::NotOperator
+    )]
+    pub operator: Account<'info, Operator>,
+
+    #[account(mut, seeds = [b"stake_vault", pool.key().as_ref()], bump = registry.stake_vault_bump)]
+    pub stake_vault: Account<'info, TokenAccount>,
+
+    #[account(
+        mut,
+        constraint = operator_token.owner == authority.key() @ CoverError::WrongTokenOwner,
+        constraint = operator_token.mint == pool.mint @ CoverError::WrongMint
+    )]
+    pub operator_token: Account<'info, TokenAccount>,
+
+    pub token_program: Program<'info, Token>,
 }
 
 /* ------------------------------------------------------------------ */
@@ -1391,11 +1592,19 @@ pub struct AttestationRevealed {
 }
 
 #[event]
+pub struct StakeAdded {
+    pub authority: Pubkey,
+    pub amount: u64,
+    pub stake: u64,
+}
+
+#[event]
 pub struct AttestationResolved {
     pub policy: Pubkey,
     pub operator: Pubkey,
     pub agreed: bool,
     pub slashed: u64,
+    pub rewarded: u64,
 }
 
 #[event]

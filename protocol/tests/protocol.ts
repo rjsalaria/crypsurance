@@ -232,6 +232,7 @@ describe("crypsurance protocol", () => {
         operator: operatorAccount,
         stakeVault,
         vault,
+        operatorToken: opToken[who.publicKey.toBase58()],
         tokenProgram: TOKEN_PROGRAM_ID,
       })
       .signers([cranker])
@@ -517,6 +518,7 @@ describe("crypsurance protocol", () => {
     // the timing rules themselves are asserted separately below with a real
     // commit window.
     const SLASH_BPS = 1000; // 10%
+    const REWARD_BPS = 3000; // 30% of each premium, split across the set
 
     /**
      * Close the commit window on demand rather than sleeping through it.
@@ -529,7 +531,7 @@ describe("crypsurance protocol", () => {
 
     async function setWindows(commit: number, reveal: number) {
       await program.methods
-        .setParams(SLASH_BPS, new BN(86_400), new BN(commit), new BN(reveal))
+        .setParams(SLASH_BPS, new BN(86_400), new BN(commit), new BN(reveal), REWARD_BPS)
         .accountsPartial({ params, authority: admin.publicKey })
         .rpc();
     }
@@ -549,7 +551,7 @@ describe("crypsurance protocol", () => {
 
     it("initializes tunable parameters", async () => {
       await program.methods
-        .initializeParams(SLASH_BPS, new BN(86_400), new BN(30), new BN(3_600))
+        .initializeParams(SLASH_BPS, new BN(86_400), new BN(30), new BN(3_600), REWARD_BPS)
         .accountsPartial({
           authority: admin.publicKey,
           pool,
@@ -560,6 +562,7 @@ describe("crypsurance protocol", () => {
 
       const p = await program.account.params.fetch(params);
       assert.equal(p.slashBps, SLASH_BPS);
+      assert.equal(p.rewardBps, REWARD_BPS);
       assert.equal(p.disputeWindow.toNumber(), 86_400);
     });
 
@@ -714,6 +717,97 @@ describe("crypsurance protocol", () => {
       assert.equal(after, before - Math.floor((before * SLASH_BPS) / 10_000));
     });
 
+    it("pays a correct operator out of the premium", async () => {
+      const policy = await claimable();
+      const a = await commit(opA, policy, true);
+      const b = await commit(opB, policy, true);
+      await closeCommitWindow();
+      await reveal(opA, policy, true, a.salt);
+      await reveal(opB, policy, true, b.salt);
+      await settle(policy);
+
+      const wallet = opToken[opA.publicKey.toBase58()];
+      const before = (await getAccount(conn, wallet)).amount;
+      await resolve(opA, policy);
+      const after = (await getAccount(conn, wallet)).amount;
+
+      // premium is 2.4% of a 10,000 payout = 240; 30% of that is 72, split
+      // across the registered operators
+      const p = await program.account.policy.fetch(policy);
+      const reg = await program.account.registry.fetch(registry);
+      const expected = Math.floor(
+        Math.floor((p.premium.toNumber() * REWARD_BPS) / 10_000) / reg.operatorCount
+      );
+      assert.isAbove(expected, 0, "the reward must be worth collecting");
+      assert.equal(after - before, ui(expected), "paid for work it got right");
+    });
+
+    it("lets a slashed operator top up and rejoin", async () => {
+      // opC was slashed below the minimum by the test above and is out
+      const before = await program.account.operator.fetch(operatorPda(opC.publicKey));
+      assert.isFalse(before.active, "precondition: slashed out of the set");
+      assert.isBelow(before.stake.toNumber(), MIN_STAKE);
+
+      const topUp = MIN_STAKE - before.stake.toNumber();
+      await program.methods
+        .addStake(new BN(topUp))
+        .accountsPartial({
+          authority: opC.publicKey,
+          pool,
+          registry,
+          operator: operatorPda(opC.publicKey),
+          stakeVault,
+          operatorToken: opToken[opC.publicKey.toBase58()],
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([opC])
+        .rpc();
+
+      const after = await program.account.operator.fetch(operatorPda(opC.publicKey));
+      assert.equal(after.stake.toNumber(), MIN_STAKE);
+      assert.isTrue(after.active, "back above the floor, back in the rotation");
+    });
+
+    it("will not let one operator top up another's stake", async () => {
+      try {
+        await program.methods
+          .addStake(new BN(100))
+          .accountsPartial({
+            authority: opA.publicKey,
+            pool,
+            registry,
+            operator: operatorPda(opC.publicKey),
+            stakeVault,
+            operatorToken: opToken[opA.publicKey.toBase58()],
+            tokenProgram: TOKEN_PROGRAM_ID,
+          })
+          .signers([opA])
+          .rpc();
+        assert.fail("topped up an operator account that was not the signer's");
+      } catch (e: any) {
+        assert.include(e.toString(), "ConstraintSeeds");
+      }
+    });
+
+    it("pays nothing to an operator that got it wrong", async () => {
+      const policy = await claimable();
+      const a = await commit(opA, policy, true);
+      const b = await commit(opB, policy, true);
+      const c = await commit(opC, policy, false);
+      await closeCommitWindow();
+      await reveal(opA, policy, true, a.salt);
+      await reveal(opB, policy, true, b.salt);
+      await reveal(opC, policy, false, c.salt);
+      await settle(policy);
+
+      const wallet = opToken[opC.publicKey.toBase58()];
+      const before = (await getAccount(conn, wallet)).amount;
+      await resolve(opC, policy);
+      const after = (await getAccount(conn, wallet)).amount;
+
+      assert.equal(after, before, "a wrong verdict earns nothing");
+    });
+
     it("will not judge the same attestation twice", async () => {
       const policy = await claimable();
       const a = await commit(opA, policy, true);
@@ -819,7 +913,7 @@ describe("crypsurance protocol", () => {
     it("lets anyone escalate a claim nobody finished assessing", async () => {
       // shrink the dispute window so the deadline has already passed
       await program.methods
-        .setParams(SLASH_BPS, new BN(1), new BN(30), new BN(3_600))
+        .setParams(SLASH_BPS, new BN(1), new BN(30), new BN(3_600), REWARD_BPS)
         .accountsPartial({ params, authority: admin.publicKey })
         .rpc();
 
@@ -843,7 +937,7 @@ describe("crypsurance protocol", () => {
       assert.deepEqual(p.status, { escalated: {} }, "a stalled claim reaches humans");
 
       await program.methods
-        .setParams(SLASH_BPS, new BN(86_400), new BN(30), new BN(3_600))
+        .setParams(SLASH_BPS, new BN(86_400), new BN(30), new BN(3_600), REWARD_BPS)
         .accountsPartial({ params, authority: admin.publicKey })
         .rpc();
     });

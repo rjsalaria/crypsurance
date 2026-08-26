@@ -8,6 +8,151 @@
   },
   "instructions": [
     {
+      "name": "add_stake",
+      "docs": [
+        "Top an operator back up after a slash.",
+        "",
+        "Without this a single wrong verdict is terminal: the slash drops an",
+        "operator below the minimum, it goes inactive, and the only way back is",
+        "to deregister and register again. Operators who cannot recover from one",
+        "bad call are operators who leave."
+      ],
+      "discriminator": [
+        58,
+        135,
+        189,
+        105,
+        160,
+        120,
+        165,
+        224
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "operator"
+          ]
+        },
+        {
+          "name": "pool",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "registry",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "operator",
+          "docs": [
+            "Seeds bind this to the signer: you can only top up your own stake."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  112,
+                  101,
+                  114,
+                  97,
+                  116,
+                  111,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        },
+        {
+          "name": "stake_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  107,
+                  101,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "operator_token",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "buy_cover",
       "docs": [
         "Buy cover. The premium is derived from the payout here rather than",
@@ -895,6 +1040,10 @@
         {
           "name": "reveal_window",
           "type": "i64"
+        },
+        {
+          "name": "reward_bps",
+          "type": "u16"
         }
       ]
     },
@@ -1111,6 +1260,91 @@
           "type": "u64"
         }
       ]
+    },
+    {
+      "name": "migrate_params",
+      "docs": [
+        "Grow the params account so a newly appended field fits.",
+        "",
+        "Params is already live, and a struct that gained a field is longer than",
+        "the bytes on chain — every instruction that reads it would fail to",
+        "deserialize, which is the whole program. The field is appended at the",
+        "end, so the existing bytes stay exactly where they were and the new one",
+        "lands in freshly zeroed space. Safe precisely because it is append-only:",
+        "reordering or inserting a field could not be migrated this way.",
+        "",
+        "Deliberately does not touch any value. Set the new field afterwards with",
+        "set_params, so a migration and a policy change are never the same",
+        "transaction."
+      ],
+      "discriminator": [
+        139,
+        188,
+        175,
+        180,
+        252,
+        87,
+        152,
+        120
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "pool",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "params",
+          "docs": [
+            "as `Params` until it has been resized, which is the entire point of this",
+            "instruction. Its identity is proven by the seeds."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  114,
+                  97,
+                  109,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
     },
     {
       "name": "register_operator",
@@ -1518,6 +1752,15 @@
           }
         },
         {
+          "name": "operator_token",
+          "docs": [
+            "Where a correct operator is paid. Constrained to that operator, so a",
+            "cranker cannot redirect the reward to itself — the same rule the payout",
+            "destination has always followed."
+          ],
+          "writable": true
+        },
+        {
           "name": "token_program",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         }
@@ -1827,6 +2070,10 @@
         {
           "name": "reveal_window",
           "type": "i64"
+        },
+        {
+          "name": "reward_bps",
+          "type": "u16"
         }
       ]
     },
@@ -2256,6 +2503,19 @@
         22,
         133
       ]
+    },
+    {
+      "name": "StakeAdded",
+      "discriminator": [
+        139,
+        170,
+        134,
+        90,
+        22,
+        96,
+        23,
+        193
+      ]
     }
   ],
   "errors": [
@@ -2510,6 +2770,10 @@
           },
           {
             "name": "slashed",
+            "type": "u64"
+          },
+          {
+            "name": "rewarded",
             "type": "u64"
           }
         ]
@@ -2815,6 +3079,15 @@
           {
             "name": "bump",
             "type": "u8"
+          },
+          {
+            "name": "reward_bps",
+            "docs": [
+              "Share of each premium set aside to pay the operators who verified the",
+              "claim, in basis points. Appended after Params was already live, which",
+              "is why migrate_params exists — see the note there before adding more."
+            ],
+            "type": "u16"
           }
         ]
       }
@@ -2993,6 +3266,26 @@
           {
             "name": "stake_vault_bump",
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "StakeAdded",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "stake",
+            "type": "u64"
           }
         ]
       }

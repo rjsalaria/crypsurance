@@ -89,7 +89,7 @@ WSL):
 ```bash
 cd protocol
 anchor build
-anchor test --provider.cluster localnet   # 11 tests on a throwaway validator
+anchor test --provider.cluster localnet   # 31 tests on a throwaway validator
 ```
 
 `--provider.cluster localnet` matters: `Anchor.toml` points at devnet so that
@@ -108,6 +108,7 @@ cd protocol
 node scripts/show-state.js     # pool counters, vault balance, every policy
 node scripts/oracle.js --dry-run   # what the oracle would settle
 node scripts/demo-claim.js     # buy cover + file a claim end to end
+node scripts/params.js         # show the live slashing / reward parameters
 ```
 
 ## Deployment
@@ -125,13 +126,19 @@ it *can't* do to you:
 
 - **Devnet only.** SURETY here is play money with no value and no path to a
   mainnet asset. Nothing regulated is being sold.
-- **One oracle, run by us.** Claim verification is not yet decentralised. The
-  vault and payout destination are enforced by the program, but the *verdict*
-  currently comes from a single operator. Multi-operator consensus is the next
-  milestone.
+- **Consensus is real; the operators are still ours.** A verdict now needs
+  M-of-N staked operators, sealed by commit-reveal so none of them can see how
+  the others voted before committing, and an operator that ends up contradicting
+  the settled outcome loses a slice of its stake. All three keys are still run
+  by us on one machine, so this proves the *mechanism*, not yet the
+  independence. Separate infrastructure is the next milestone.
+- **Operators are paid, in play money.** A correct verdict earns a share of the
+  premium the holder already paid. It is a real incentive in a fake currency;
+  read it as a working design, not a yield.
 - **The upgrade authority is a keypair, not a multisig.** Whoever holds it can
   replace the program. Fine for a devnet testbed; a multisig is required before
-  anything resembling mainnet.
+  anything resembling mainnet, and the intended end state is that operators
+  govern upgrades by stake.
 - **Not audited.**
 - **Payouts are parametric.** A claim pays when the data says the trigger was
   met — currently a flight delayed 3+ hours — not when someone judges a loss.

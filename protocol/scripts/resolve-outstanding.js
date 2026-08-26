@@ -14,7 +14,7 @@ const fs = require("fs");
 const path = require("path");
 const anchor = require("@coral-xyz/anchor");
 const { PublicKey, Keypair, Connection } = require("@solana/web3.js");
-const { TOKEN_PROGRAM_ID } = require("@solana/spl-token");
+const { TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync } = require("@solana/spl-token");
 
 const DRY_RUN = process.argv.includes("--dry-run");
 
@@ -60,6 +60,8 @@ const DRY_RUN = process.argv.includes("--dry-run");
     program.programId
   );
 
+  const mint = (await program.account.pool.fetch(pool)).mint;
+
   const attestations = await program.account.attestation.all();
   const policies = new Map(
     (await program.account.policy.all()).map((p) => [p.publicKey.toBase58(), p.account])
@@ -101,6 +103,12 @@ const DRY_RUN = process.argv.includes("--dry-run");
         operator: a.operator,
         stakeVault,
         vault,
+        // the reward is constrained to the operator's own authority, so this
+        // has to be looked up per attestation rather than assumed to be ours
+        operatorToken: getAssociatedTokenAddressSync(
+          mint,
+          (await program.account.operator.fetch(a.operator)).authority
+        ),
         tokenProgram: TOKEN_PROGRAM_ID,
       })
       .rpc();
