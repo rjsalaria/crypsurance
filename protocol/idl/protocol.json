@@ -8,205 +8,6 @@
   },
   "instructions": [
     {
-      "name": "attest_claim",
-      "docs": [
-        "One operator's verdict on a claim.",
-        "",
-        "The Attestation PDA is keyed by (policy, operator), so an operator",
-        "cannot vote twice — the second attempt collides with an account that",
-        "already exists, before any of our logic runs."
-      ],
-      "discriminator": [
-        155,
-        101,
-        33,
-        39,
-        9,
-        31,
-        214,
-        107
-      ],
-      "accounts": [
-        {
-          "name": "authority",
-          "writable": true,
-          "signer": true,
-          "relations": [
-            "operator"
-          ]
-        },
-        {
-          "name": "pool",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  112,
-                  111,
-                  111,
-                  108
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "name": "registry",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  114,
-                  101,
-                  103,
-                  105,
-                  115,
-                  116,
-                  114,
-                  121
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "pool"
-              }
-            ]
-          }
-        },
-        {
-          "name": "operator",
-          "docs": [
-            "Seeds bind this to the signer, so an operator can only ever attest as",
-            "itself — there is no account it could name to vote as someone else."
-          ],
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  111,
-                  112,
-                  101,
-                  114,
-                  97,
-                  116,
-                  111,
-                  114
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "pool"
-              },
-              {
-                "kind": "account",
-                "path": "authority"
-              }
-            ]
-          }
-        },
-        {
-          "name": "policy",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  112,
-                  111,
-                  108,
-                  105,
-                  99,
-                  121
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "policy.holder",
-                "account": "Policy"
-              },
-              {
-                "kind": "account",
-                "path": "policy.nonce",
-                "account": "Policy"
-              }
-            ]
-          }
-        },
-        {
-          "name": "tally",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  116,
-                  97,
-                  108,
-                  108,
-                  121
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "policy"
-              }
-            ]
-          }
-        },
-        {
-          "name": "attestation",
-          "docs": [
-            "One per (policy, operator). A second vote collides with an account that",
-            "already exists, so double-voting is impossible by construction."
-          ],
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  97,
-                  116,
-                  116,
-                  101,
-                  115,
-                  116
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "policy"
-              },
-              {
-                "kind": "account",
-                "path": "operator"
-              }
-            ]
-          }
-        },
-        {
-          "name": "system_program",
-          "address": "11111111111111111111111111111111"
-        }
-      ],
-      "args": [
-        {
-          "name": "approved",
-          "type": "bool"
-        },
-        {
-          "name": "basis",
-          "type": "string"
-        }
-      ]
-    },
-    {
       "name": "buy_cover",
       "docs": [
         "Buy cover. The premium is derived from the payout here rather than",
@@ -323,6 +124,233 @@
         {
           "name": "payout",
           "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "commit_attestation",
+      "docs": [
+        "Commit to a verdict without revealing it.",
+        "",
+        "The commitment is sha256(approved || salt || operator), so the chain",
+        "stores 32 bytes that say nothing. This exists because the previous",
+        "design let an operator wait, read what everyone else had said, and copy",
+        "it — which produces the appearance of consensus while only one operator",
+        "actually checked anything, and makes slashing unfair to whoever did the",
+        "work.",
+        "",
+        "Copying somebody else's commitment is self-defeating: without their",
+        "salt you can never reveal it, and an unrevealed commitment is slashed",
+        "exactly like a wrong one."
+      ],
+      "discriminator": [
+        189,
+        31,
+        48,
+        199,
+        210,
+        173,
+        251,
+        43
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "operator"
+          ]
+        },
+        {
+          "name": "pool",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "registry",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "params",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  114,
+                  97,
+                  109,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "operator",
+          "docs": [
+            "Seeds bind this to the signer: an operator can only ever commit as",
+            "itself."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  112,
+                  101,
+                  114,
+                  97,
+                  116,
+                  111,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        },
+        {
+          "name": "policy",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "policy.holder",
+                "account": "Policy"
+              },
+              {
+                "kind": "account",
+                "path": "policy.nonce",
+                "account": "Policy"
+              }
+            ]
+          }
+        },
+        {
+          "name": "tally",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  97,
+                  108,
+                  108,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "policy"
+              }
+            ]
+          }
+        },
+        {
+          "name": "attestation",
+          "docs": [
+            "One per (policy, operator). Committing twice collides with an account",
+            "that already exists, before any of our logic runs."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  116,
+                  116,
+                  101,
+                  115,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "policy"
+              },
+              {
+                "kind": "account",
+                "path": "operator"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "commitment",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
         }
       ]
     },
@@ -543,6 +571,149 @@
       ]
     },
     {
+      "name": "escalate_stalled_claim",
+      "docs": [
+        "Escalate a claim that nobody finished assessing.",
+        "",
+        "Permissionless once the dispute window has passed. Without this a claim",
+        "that never reaches the threshold sits `Requested` forever and the",
+        "holder has no path at all — the worst outcome the protocol can produce,",
+        "and one no operator has any incentive to fix."
+      ],
+      "discriminator": [
+        102,
+        79,
+        245,
+        250,
+        229,
+        62,
+        82,
+        162
+      ],
+      "accounts": [
+        {
+          "name": "cranker",
+          "docs": [
+            "Anyone. A stalled claim is everyone's problem and nobody's job."
+          ],
+          "signer": true
+        },
+        {
+          "name": "pool",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "registry",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "params",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  114,
+                  97,
+                  109,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "policy",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "policy.holder",
+                "account": "Policy"
+              },
+              {
+                "kind": "account",
+                "path": "policy.nonce",
+                "account": "Policy"
+              }
+            ]
+          }
+        },
+        {
+          "name": "tally",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  97,
+                  108,
+                  108,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "policy"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "file_claim",
       "docs": [
         "Ask for the claim to be assessed. Only the holder can do this, and only",
@@ -632,6 +803,100 @@
         }
       ],
       "args": []
+    },
+    {
+      "name": "initialize_params",
+      "docs": [
+        "Create the tunable parameter set.",
+        "",
+        "Separate from `Registry` because the registry is already live on devnet",
+        "and appending fields to a deployed account leaves it undeserializable —",
+        "the same reason the registry itself sits beside `Pool` rather than",
+        "inside it. It is also the account operator governance will own later:",
+        "keeping every knob in one place means handing over control is a change",
+        "of authority, not a migration."
+      ],
+      "discriminator": [
+        117,
+        109,
+        134,
+        184,
+        50,
+        252,
+        179,
+        6
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "pool",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "params",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  114,
+                  97,
+                  109,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "slash_bps",
+          "type": "u16"
+        },
+        {
+          "name": "dispute_window",
+          "type": "i64"
+        },
+        {
+          "name": "commit_window",
+          "type": "i64"
+        },
+        {
+          "name": "reveal_window",
+          "type": "i64"
+        }
+      ]
     },
     {
       "name": "initialize_pool",
@@ -999,6 +1264,435 @@
       ]
     },
     {
+      "name": "resolve_attestation",
+      "docs": [
+        "Judge one attestation against the outcome the claim actually settled to,",
+        "then credit or slash the operator who made it.",
+        "",
+        "Permissionless on purpose. If only the operator could call this, an",
+        "operator who expects to be slashed would simply never call it — and",
+        "their `pending` count would never clear, which is a lock, not a penalty.",
+        "",
+        "Worth being honest in the code about what this measures: the program",
+        "cannot see the flight. It compares an attestation to the settled",
+        "outcome, so this slashes *disagreement with the consensus*, not lying.",
+        "An operator who is right while the majority is wrong is punished by",
+        "this rule. Commit-reveal removes the incentive to copy, which is what",
+        "makes the rule defensible; it does not make the rule omniscient."
+      ],
+      "discriminator": [
+        34,
+        6,
+        45,
+        248,
+        171,
+        45,
+        169,
+        215
+      ],
+      "accounts": [
+        {
+          "name": "cranker",
+          "docs": [
+            "Pays the fee. Checked against nothing — anyone may resolve, which is",
+            "what stops an operator avoiding a slash by never calling this."
+          ],
+          "signer": true
+        },
+        {
+          "name": "pool",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "registry",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "params",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  114,
+                  97,
+                  109,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "policy",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "policy.holder",
+                "account": "Policy"
+              },
+              {
+                "kind": "account",
+                "path": "policy.nonce",
+                "account": "Policy"
+              }
+            ]
+          }
+        },
+        {
+          "name": "attestation",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  116,
+                  116,
+                  101,
+                  115,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "policy"
+              },
+              {
+                "kind": "account",
+                "path": "operator"
+              }
+            ]
+          }
+        },
+        {
+          "name": "operator",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  112,
+                  101,
+                  114,
+                  97,
+                  116,
+                  111,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              },
+              {
+                "kind": "account",
+                "path": "operator.authority",
+                "account": "Operator"
+              }
+            ]
+          }
+        },
+        {
+          "name": "stake_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  107,
+                  101,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "reveal_attestation",
+      "docs": [
+        "Open the envelope. Only accepted once the commit window has closed —",
+        "an early reveal would hand the answer to everyone still deciding, which",
+        "is the leak the commit phase exists to prevent."
+      ],
+      "discriminator": [
+        215,
+        184,
+        125,
+        82,
+        193,
+        107,
+        150,
+        221
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "operator"
+          ]
+        },
+        {
+          "name": "pool",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "params",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  114,
+                  97,
+                  109,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "operator",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  112,
+                  101,
+                  114,
+                  97,
+                  116,
+                  111,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        },
+        {
+          "name": "policy",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "policy.holder",
+                "account": "Policy"
+              },
+              {
+                "kind": "account",
+                "path": "policy.nonce",
+                "account": "Policy"
+              }
+            ]
+          }
+        },
+        {
+          "name": "tally",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  97,
+                  108,
+                  108,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "policy"
+              }
+            ]
+          }
+        },
+        {
+          "name": "attestation",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  116,
+                  116,
+                  101,
+                  115,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "policy"
+              },
+              {
+                "kind": "account",
+                "path": "operator"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "approved",
+          "type": "bool"
+        },
+        {
+          "name": "basis",
+          "type": "string"
+        },
+        {
+          "name": "salt",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "set_oracle",
       "docs": [
         "Hand the oracle role to a different key (admin only)."
@@ -1043,6 +1737,75 @@
         {
           "name": "new_oracle",
           "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "set_params",
+      "docs": [
+        "Retune the parameters. Admin today; operator vote later, which is why",
+        "every number the protocol argues about lives here rather than as a",
+        "constant in the binary."
+      ],
+      "discriminator": [
+        27,
+        234,
+        178,
+        52,
+        147,
+        2,
+        187,
+        141
+      ],
+      "accounts": [
+        {
+          "name": "params",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  114,
+                  97,
+                  109,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "params.pool",
+                "account": "Params"
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "params"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "slash_bps",
+          "type": "u16"
+        },
+        {
+          "name": "dispute_window",
+          "type": "i64"
+        },
+        {
+          "name": "commit_window",
+          "type": "i64"
+        },
+        {
+          "name": "reveal_window",
+          "type": "i64"
         }
       ]
     },
@@ -1303,6 +2066,19 @@
       ]
     },
     {
+      "name": "Params",
+      "discriminator": [
+        129,
+        232,
+        120,
+        183,
+        156,
+        198,
+        9,
+        242
+      ]
+    },
+    {
       "name": "Policy",
       "discriminator": [
         222,
@@ -1344,16 +2120,42 @@
   ],
   "events": [
     {
-      "name": "ClaimAttested",
+      "name": "AttestationCommitted",
       "discriminator": [
-        220,
-        101,
-        75,
-        125,
-        149,
-        62,
-        158,
-        88
+        39,
+        198,
+        130,
+        214,
+        119,
+        52,
+        71,
+        7
+      ]
+    },
+    {
+      "name": "AttestationResolved",
+      "discriminator": [
+        249,
+        142,
+        38,
+        96,
+        237,
+        239,
+        214,
+        229
+      ]
+    },
+    {
+      "name": "AttestationRevealed",
+      "discriminator": [
+        161,
+        180,
+        155,
+        111,
+        162,
+        82,
+        164,
+        91
       ]
     },
     {
@@ -1525,6 +2327,56 @@
       "code": 6017,
       "name": "OperatorInactive",
       "msg": "Operator is not active"
+    },
+    {
+      "code": 6018,
+      "name": "BadParameter",
+      "msg": "Parameter is outside the permitted range"
+    },
+    {
+      "code": 6019,
+      "name": "AlreadyResolved",
+      "msg": "This attestation has already been judged"
+    },
+    {
+      "code": 6020,
+      "name": "NotSettled",
+      "msg": "The claim has not settled yet"
+    },
+    {
+      "code": 6021,
+      "name": "DisputeWindowOpen",
+      "msg": "The dispute window has not closed"
+    },
+    {
+      "code": 6022,
+      "name": "ThresholdMet",
+      "msg": "The threshold was met; settle it instead of escalating"
+    },
+    {
+      "code": 6023,
+      "name": "CommitWindowClosed",
+      "msg": "The commit window has closed"
+    },
+    {
+      "code": 6024,
+      "name": "CommitWindowOpen",
+      "msg": "The commit window is still open"
+    },
+    {
+      "code": 6025,
+      "name": "RevealWindowClosed",
+      "msg": "The reveal window has closed"
+    },
+    {
+      "code": 6026,
+      "name": "AlreadyRevealed",
+      "msg": "This attestation was already revealed"
+    },
+    {
+      "code": 6027,
+      "name": "CommitmentMismatch",
+      "msg": "Revealed verdict does not match the commitment"
     }
   ],
   "types": [
@@ -1548,7 +2400,22 @@
             "type": "pubkey"
           },
           {
+            "name": "commitment",
+            "docs": [
+              "sha256(approved || salt || operator). Says nothing until revealed."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
             "name": "approved",
+            "docs": [
+              "Meaningless until `revealed` is true."
+            ],
             "type": "bool"
           },
           {
@@ -1560,9 +2427,13 @@
             "type": "i64"
           },
           {
+            "name": "revealed",
+            "type": "bool"
+          },
+          {
             "name": "resolved",
             "docs": [
-              "Set once week 3 has judged it, so stake accounting cannot double-count."
+              "Set once the verdict has been judged, so stake cannot be double-counted."
             ],
             "type": "bool"
           },
@@ -1574,7 +2445,47 @@
       }
     },
     {
-      "name": "ClaimAttested",
+      "name": "AttestationCommitted",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "policy",
+            "type": "pubkey"
+          },
+          {
+            "name": "operator",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "AttestationResolved",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "policy",
+            "type": "pubkey"
+          },
+          {
+            "name": "operator",
+            "type": "pubkey"
+          },
+          {
+            "name": "agreed",
+            "type": "bool"
+          },
+          {
+            "name": "slashed",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "AttestationRevealed",
       "type": {
         "kind": "struct",
         "fields": [
@@ -1822,6 +2733,57 @@
           {
             "name": "stake",
             "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Params",
+      "docs": [
+        "Every number the protocol argues about, in one account.",
+        "",
+        "Admin-controlled today, operator-voted later — which is the whole reason",
+        "these are account fields rather than constants in the binary."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "slash_bps",
+            "docs": [
+              "Basis points of an operator's stake taken for a wrong verdict."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "dispute_window",
+            "docs": [
+              "Seconds a claim may sit without quorum before anyone can escalate it."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "commit_window",
+            "docs": [
+              "Commit-reveal windows, in seconds."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "reveal_window",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
           }
         ]
       }

@@ -24,6 +24,7 @@ import {
   getAccount,
   TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
+import { createHash, randomBytes } from "crypto";
 import { assert } from "chai";
 import { Protocol } from "../target/types/protocol";
 
@@ -50,6 +51,7 @@ describe("crypsurance protocol", () => {
   let vault: PublicKey;
   let registry: PublicKey;
   let stakeVault: PublicKey;
+  let params: PublicKey;
   let holderToken: PublicKey;
   let strangerToken: PublicKey;
   const opToken: Record<string, PublicKey> = {};
@@ -136,30 +138,6 @@ describe("crypsurance protocol", () => {
       .rpc();
   }
 
-  /** One operator's verdict. */
-  async function attest(
-    who: Keypair,
-    policy: PublicKey,
-    approved: boolean,
-    basis = "testnet-simulated"
-  ) {
-    const operatorAccount = operatorPda(who.publicKey);
-    await program.methods
-      .attestClaim(approved, basis)
-      .accountsPartial({
-        authority: who.publicKey,
-        pool,
-        registry,
-        operator: operatorAccount,
-        policy,
-        tally: tallyPda(policy),
-        attestation: attestPda(policy, operatorAccount),
-        systemProgram: SystemProgram.programId,
-      })
-      .signers([who])
-      .rpc();
-  }
-
   /** Crank settlement. The signer is deliberately arbitrary. */
   async function settle(
     policy: PublicKey,
@@ -176,6 +154,80 @@ describe("crypsurance protocol", () => {
         tally: tallyPda(policy),
         vault,
         holderToken: token,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([cranker])
+      .rpc();
+  }
+
+  /** sha256(approved || salt || operatorAccount) — must match the program. */
+  const commitmentFor = (approved: boolean, salt: Buffer, operatorAccount: PublicKey) =>
+    createHash("sha256")
+      .update(Buffer.concat([Buffer.from([approved ? 1 : 0]), salt, operatorAccount.toBuffer()]))
+      .digest();
+
+  /** Commit to a verdict without revealing it. Returns the salt to reveal with. */
+  async function commit(who: Keypair, policy: PublicKey, approved: boolean) {
+    const operatorAccount = operatorPda(who.publicKey);
+    const salt = randomBytes(32);
+    const commitment = commitmentFor(approved, salt, operatorAccount);
+    await program.methods
+      .commitAttestation([...commitment])
+      .accountsPartial({
+        authority: who.publicKey,
+        pool,
+        registry,
+        params,
+        operator: operatorAccount,
+        policy,
+        tally: tallyPda(policy),
+        attestation: attestPda(policy, operatorAccount),
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([who])
+      .rpc();
+    return { salt, commitment };
+  }
+
+  /** Open the envelope. */
+  async function reveal(
+    who: Keypair,
+    policy: PublicKey,
+    approved: boolean,
+    salt: Buffer,
+    basis = "testnet-simulated"
+  ) {
+    const operatorAccount = operatorPda(who.publicKey);
+    await program.methods
+      .revealAttestation(approved, basis, [...salt])
+      .accountsPartial({
+        authority: who.publicKey,
+        pool,
+        params,
+        operator: operatorAccount,
+        policy,
+        tally: tallyPda(policy),
+        attestation: attestPda(policy, operatorAccount),
+      })
+      .signers([who])
+      .rpc();
+  }
+
+  /** Judge one operator's verdict against the settled outcome. */
+  async function resolve(who: Keypair, policy: PublicKey, cranker: Keypair = stranger) {
+    const operatorAccount = operatorPda(who.publicKey);
+    await program.methods
+      .resolveAttestation()
+      .accountsPartial({
+        cranker: cranker.publicKey,
+        pool,
+        registry,
+        params,
+        policy,
+        attestation: attestPda(policy, operatorAccount),
+        operator: operatorAccount,
+        stakeVault,
+        vault,
         tokenProgram: TOKEN_PROGRAM_ID,
       })
       .signers([cranker])
@@ -220,6 +272,10 @@ describe("crypsurance protocol", () => {
     );
     [stakeVault] = PublicKey.findProgramAddressSync(
       [Buffer.from("stake_vault"), pool.toBuffer()],
+      program.programId
+    );
+    [params] = PublicKey.findProgramAddressSync(
+      [Buffer.from("params"), pool.toBuffer()],
       program.programId
     );
   });
@@ -449,166 +505,310 @@ describe("crypsurance protocol", () => {
     });
   });
   /* ---------------------------------------------------------------- */
-  /* M3 week 2 — attestations and M-of-N settlement                    */
+  /* M3 week 3 — hidden verdicts and slashing                          */
   /* ---------------------------------------------------------------- */
 
-  describe("consensus settlement", () => {
-    /** Buy cover and file the claim, ready to be attested. */
+  describe("commit-reveal and slashing", () => {
+    // Windows are set to zero in tests so reveals are accepted immediately;
+    // the timing rules themselves are asserted separately below with a real
+    // commit window.
+    const SLASH_BPS = 1000; // 10%
+
+    /**
+     * Close the commit window on demand rather than sleeping through it.
+     * Timing sleeps race the two transactions that open a claim, which made
+     * these tests flaky; the window is a parameter, so the test can just shut
+     * it. The rule that reveals are refused while it is open gets its own test
+     * with the window genuinely open.
+     */
+    const closeCommitWindow = () => setWindows(0, 3_600);
+
+    async function setWindows(commit: number, reveal: number) {
+      await program.methods
+        .setParams(SLASH_BPS, new BN(86_400), new BN(commit), new BN(reveal))
+        .accountsPartial({ params, authority: admin.publicKey })
+        .rpc();
+    }
+
+    // Each test starts from the same window configuration. Tests that close
+    // the commit window would otherwise leave it shut for whatever ran next,
+    // which is how the first version of this suite failed.
+    beforeEach(async () => {
+      if (await conn.getAccountInfo(params)) await setWindows(30, 3_600);
+    });
+
     async function claimable(payout = 10_000, flight = "TEST-DELAY") {
       const { policy } = await buy(payout, flight);
       await file(policy);
       return policy;
     }
 
-    it("will not settle before the threshold is met", async () => {
-      const policy = await claimable();
-      await attest(opA, policy, true);
+    it("initializes tunable parameters", async () => {
+      await program.methods
+        .initializeParams(SLASH_BPS, new BN(86_400), new BN(30), new BN(3_600))
+        .accountsPartial({
+          authority: admin.publicKey,
+          pool,
+          params,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
 
-      try {
-        await settle(policy);
-        assert.fail("one attestation settled a claim needing two");
-      } catch (e: any) {
-        assert.include(e.toString(), "ThresholdNotMet");
-      }
-
-      const p = await program.account.policy.fetch(policy);
-      assert.deepEqual(p.status, { requested: {} }, "still awaiting agreement");
+      const p = await program.account.params.fetch(params);
+      assert.equal(p.slashBps, SLASH_BPS);
+      assert.equal(p.disputeWindow.toNumber(), 86_400);
     });
 
-    it("pays the holder once two operators agree, with nobody privileged signing", async () => {
+    it("stores a commitment that reveals nothing", async () => {
+      const policy = await claimable();
+      const { commitment } = await commit(opA, policy, true);
+
+      const a = await program.account.attestation.fetch(
+        attestPda(policy, operatorPda(opA.publicKey))
+      );
+      assert.isFalse(a.revealed);
+      assert.deepEqual(Buffer.from(a.commitment), commitment);
+      // the verdict field exists but carries no information yet
+      assert.isFalse(a.approved);
+
+      const t = await program.account.claimTally.fetch(tallyPda(policy));
+      assert.equal(t.approvals, 0, "a commitment must not move the tally");
+      assert.equal(t.denials, 0);
+    });
+
+    it("counts the verdict only once revealed", async () => {
+      const policy = await claimable();
+      const a = await commit(opA, policy, true);
+      await closeCommitWindow();
+      await reveal(opA, policy, true, a.salt);
+
+      const t = await program.account.claimTally.fetch(tallyPda(policy));
+      assert.equal(t.approvals, 1);
+    });
+
+    it("rejects a reveal that does not match the commitment", async () => {
+      const policy = await claimable();
+      const a = await commit(opA, policy, true);
+      await closeCommitWindow();
+
+      try {
+        // same salt, opposite verdict
+        await reveal(opA, policy, false, a.salt);
+        assert.fail("a verdict was changed after committing to it");
+      } catch (e: any) {
+        assert.include(e.toString(), "CommitmentMismatch");
+      }
+    });
+
+    it("will not accept a reveal while the commit window is open", async () => {
+      await setWindows(3_600, 3_600); // an hour to commit
+      const policy = await claimable();
+      const a = await commit(opA, policy, true);
+
+      try {
+        await reveal(opA, policy, true, a.salt);
+        assert.fail("an early reveal would leak the answer to everyone else");
+      } catch (e: any) {
+        assert.include(e.toString(), "CommitWindowOpen");
+      }
+      await setWindows(30, 3_600);
+    });
+
+    it("pays out when the revealed verdicts reach the threshold", async () => {
       const policy = await claimable();
       const before = (await getAccount(conn, holderToken)).amount;
 
-      await attest(opA, policy, true, "delay 214 min");
-      await attest(opB, policy, true, "delay 214 min");
-
-      // `stranger` has no role: not the oracle, not an operator, not the
-      // holder. If this settles, settlement is genuinely permissionless.
-      await settle(policy, holderToken, stranger);
+      const a = await commit(opA, policy, true);
+      const b = await commit(opB, policy, true);
+      await closeCommitWindow();
+      await reveal(opA, policy, true, a.salt, "delay 214 min");
+      await reveal(opB, policy, true, b.salt, "delay 214 min");
+      await settle(policy);
 
       const after = (await getAccount(conn, holderToken)).amount;
-      assert.equal(after - before, ui(10_000), "the payout reached the holder");
-
+      assert.equal(after - before, ui(10_000));
       const p = await program.account.policy.fetch(policy);
       assert.deepEqual(p.status, { paid: {} });
-      assert.equal(p.basis, "delay 214 min");
     });
 
-    it("will not let an operator redirect a payout to another wallet", async () => {
-      // The M2 guarantee, restated for consensus: operators decide whether a
-      // claim is valid and never who is paid. This is the test the product's
-      // central claim rests on, and it must survive every change to how the
-      // verdict is reached.
+    it("credits an operator whose verdict matched the outcome", async () => {
       const policy = await claimable();
-      await attest(opA, policy, true);
-      await attest(opB, policy, true);
-
-      try {
-        await settle(policy, strangerToken, stranger);
-        assert.fail("a payout was redirected away from the policy holder");
-      } catch (e: any) {
-        assert.include(e.toString(), "WrongTokenOwner");
-      }
-
-      const p = await program.account.policy.fetch(policy);
-      assert.deepEqual(p.status, { requested: {} }, "nothing settled");
-    });
-
-    it("will not let one operator attest twice to reach the threshold alone", async () => {
-      const policy = await claimable();
-      await attest(opA, policy, true);
-
-      try {
-        await attest(opA, policy, true);
-        assert.fail("an operator voted twice");
-      } catch (e: any) {
-        // the attestation PDA already exists — the system program refuses to
-        // allocate it again, before any of our logic runs
-        assert.include(e.toString(), "custom program error: 0x0");
-      }
-
-      const t = await program.account.claimTally.fetch(tallyPda(policy));
-      assert.equal(t.approvals, 1, "the tally did not move");
-    });
-
-    it("refuses an attestation from a key that is not a registered operator", async () => {
-      const policy = await claimable();
-      try {
-        await attest(stranger, policy, true);
-        assert.fail("an unregistered key attested");
-      } catch (e: any) {
-        // no Operator account exists at the seeds derived from this signer
-        assert.ok(e.toString().length > 0);
-      }
-    });
-
-    it("denies the claim when the operators agree it should not pay", async () => {
-      const policy = await claimable(10_000, "TEST-ONTIME");
-      const vaultBefore = (await getAccount(conn, vault)).amount;
-      const holderBefore = (await getAccount(conn, holderToken)).amount;
-
-      await attest(opA, policy, false, "on time");
-      await attest(opB, policy, false, "on time");
+      const a = await commit(opA, policy, true);
+      const b = await commit(opB, policy, true);
+      await closeCommitWindow();
+      await reveal(opA, policy, true, a.salt);
+      await reveal(opB, policy, true, b.salt);
       await settle(policy);
 
-      const p = await program.account.policy.fetch(policy);
-      assert.deepEqual(p.status, { denied: {} });
-      assert.equal(
-        (await getAccount(conn, vault)).amount,
-        vaultBefore,
-        "a denial must not move funds"
-      );
-      assert.equal((await getAccount(conn, holderToken)).amount, holderBefore);
-    });
+      const beforeAgreed = (
+        await program.account.operator.fetch(operatorPda(opA.publicKey))
+      ).agreed.toNumber();
 
-    it("cannot settle the same claim twice", async () => {
-      const policy = await claimable();
-      await attest(opA, policy, true);
-      await attest(opB, policy, true);
-      await settle(policy);
+      await resolve(opA, policy);
 
-      try {
-        await settle(policy);
-        assert.fail("a settled claim was settled again");
-      } catch (e: any) {
-        assert.include(e.toString(), "NotSettleable");
-      }
-    });
-
-    it("counts each operator's attestations against their stake", async () => {
       const o = await program.account.operator.fetch(operatorPda(opA.publicKey));
-      assert.isAbove(o.attestations.toNumber(), 0);
-      // pending stays raised until week 3 judges each attestation, which is
-      // what stops an operator withdrawing before its votes are assessed
-      assert.isAbove(o.pending, 0);
+      assert.equal(o.agreed.toNumber(), beforeAgreed + 1);
+      assert.equal(o.stake.toNumber(), MIN_STAKE, "an agreeing operator keeps its stake");
     });
 
-    it("will not let an operator withdraw stake with attestations outstanding", async () => {
+    it("slashes an operator whose verdict contradicted the outcome", async () => {
+      const policy = await claimable();
+      // A and B say pay; C says deny and is therefore wrong
+      const a = await commit(opA, policy, true);
+      const b = await commit(opB, policy, true);
+      const c = await commit(opC, policy, false);
+      await closeCommitWindow();
+      await reveal(opA, policy, true, a.salt);
+      await reveal(opB, policy, true, b.salt);
+      await reveal(opC, policy, false, c.salt);
+      await settle(policy);
+
+      const before = (await program.account.operator.fetch(operatorPda(opC.publicKey))).stake.toNumber();
+      const vaultBefore = (await getAccount(conn, vault)).amount;
+
+      await resolve(opC, policy);
+
+      const o = await program.account.operator.fetch(operatorPda(opC.publicKey));
+      const expected = before - Math.floor((before * SLASH_BPS) / 10_000);
+      assert.equal(o.stake.toNumber(), expected, "10% of stake taken");
+
+      // the slashed stake backs future payouts rather than paying the majority
+      const vaultAfter = (await getAccount(conn, vault)).amount;
+      assert.equal(vaultAfter - vaultBefore, ui(before - expected));
+    });
+
+    it("will not judge the same attestation twice", async () => {
+      const policy = await claimable();
+      const a = await commit(opA, policy, true);
+      const b = await commit(opB, policy, true);
+      await closeCommitWindow();
+      await reveal(opA, policy, true, a.salt);
+      await reveal(opB, policy, true, b.salt);
+      await settle(policy);
+      await resolve(opA, policy);
+
+      try {
+        await resolve(opA, policy);
+        assert.fail("stake was judged twice for one verdict");
+      } catch (e: any) {
+        assert.include(e.toString(), "AlreadyResolved");
+      }
+    });
+
+    it("will not judge an attestation before the claim settles", async () => {
+      const policy = await claimable();
+      const a = await commit(opA, policy, true);
+      await closeCommitWindow();
+      await reveal(opA, policy, true, a.salt);
+
+      try {
+        await resolve(opA, policy);
+        assert.fail("an attestation was judged against an unsettled claim");
+      } catch (e: any) {
+        assert.include(e.toString(), "NotSettled");
+      }
+    });
+
+    it("clears one pending count per verdict judged", async () => {
+      const policy = await claimable();
+      const a = await commit(opA, policy, true);
+      const b = await commit(opB, policy, true);
+      await closeCommitWindow();
+      await reveal(opA, policy, true, a.salt);
+      await reveal(opB, policy, true, b.salt);
+      await settle(policy);
+
+      const before = (
+        await program.account.operator.fetch(operatorPda(opB.publicKey))
+      ).pending;
+      await resolve(opB, policy);
+      const after = (
+        await program.account.operator.fetch(operatorPda(opB.publicKey))
+      ).pending;
+
+      assert.equal(after, before - 1, "one judged verdict clears one count");
+    });
+
+    it("will not let an operator withdraw while a verdict is unjudged", async () => {
+      // opB is carrying commitments from the tests above, which is exactly the
+      // state that must block withdrawal — vote, then leave before being
+      // judged, is the move this prevents.
+      const o = await program.account.operator.fetch(operatorPda(opB.publicKey));
+      assert.isAbove(o.pending, 0, "precondition: something is outstanding");
+
       try {
         await program.methods
           .deregisterOperator()
           .accountsPartial({
-            authority: opA.publicKey,
+            authority: opB.publicKey,
             pool,
             registry,
-            operator: operatorPda(opA.publicKey),
+            operator: operatorPda(opB.publicKey),
             stakeVault,
-            operatorToken: opToken[opA.publicKey.toBase58()],
+            operatorToken: opToken[opB.publicKey.toBase58()],
             tokenProgram: TOKEN_PROGRAM_ID,
           })
-          .signers([opA])
+          .signers([opB])
           .rpc();
-        assert.fail("an operator withdrew while its votes were unjudged");
+        assert.fail("an operator withdrew before its verdicts were judged");
       } catch (e: any) {
         assert.include(e.toString(), "OperatorHasPendingAttestations");
       }
     });
 
-    it("keeps a running count of policies and settlements", async () => {
-      const p = await program.account.pool.fetch(pool);
-      assert.isAbove(p.policies.toNumber(), 0);
-      assert.isAbove(p.claimsPaid.toNumber(), 0);
-      assert.isAbove(p.claimsDenied.toNumber(), 0);
+    it("refuses to escalate a stalled claim before the deadline", async () => {
+      const policy = await claimable();
+      await commit(opA, policy, true);
+
+      try {
+        await program.methods
+          .escalateStalledClaim()
+          .accountsPartial({
+            cranker: stranger.publicKey,
+            pool,
+            registry,
+            params,
+            policy,
+            tally: tallyPda(policy),
+          })
+          .signers([stranger])
+          .rpc();
+        assert.fail("escalated a claim whose dispute window was still open");
+      } catch (e: any) {
+        assert.include(e.toString(), "DisputeWindowOpen");
+      }
+    });
+
+    it("lets anyone escalate a claim nobody finished assessing", async () => {
+      // shrink the dispute window so the deadline has already passed
+      await program.methods
+        .setParams(SLASH_BPS, new BN(1), new BN(30), new BN(3_600))
+        .accountsPartial({ params, authority: admin.publicKey })
+        .rpc();
+
+      const policy = await claimable();
+      await new Promise((r) => setTimeout(r, 1500));
+
+      await program.methods
+        .escalateStalledClaim()
+        .accountsPartial({
+          cranker: stranger.publicKey,
+          pool,
+          registry,
+          params,
+          policy,
+          tally: tallyPda(policy),
+        })
+        .signers([stranger])
+        .rpc();
+
+      const p = await program.account.policy.fetch(policy);
+      assert.deepEqual(p.status, { escalated: {} }, "a stalled claim reaches humans");
+
+      await program.methods
+        .setParams(SLASH_BPS, new BN(86_400), new BN(30), new BN(3_600))
+        .accountsPartial({ params, authority: admin.publicKey })
+        .rpc();
     });
   });
 

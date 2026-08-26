@@ -28,6 +28,11 @@ custom-panic = []
 [dependencies]
 anchor-lang = "0.32.1"
 anchor-spl = "0.32.1"
+# Commit-reveal needs sha256. Anchor 0.32 split the old solana-program
+# monolith apart and no longer re-exports a hash module, so the hasher is
+# declared directly. The version matches what the dependency tree already
+# pins, so this adds no new build.
+solana-sha256-hasher = "2.3.0"
 
 
 [lints.rust]

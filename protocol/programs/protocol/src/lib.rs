@@ -294,13 +294,22 @@ pub mod protocol {
         Ok(())
     }
 
-    /// One operator's verdict on a claim.
+    /// Commit to a verdict without revealing it.
     ///
-    /// The Attestation PDA is keyed by (policy, operator), so an operator
-    /// cannot vote twice — the second attempt collides with an account that
-    /// already exists, before any of our logic runs.
-    pub fn attest_claim(ctx: Context<AttestClaim>, approved: bool, basis: String) -> Result<()> {
-        require!(basis.len() <= 64, CoverError::BasisTooLong);
+    /// The commitment is sha256(approved || salt || operator), so the chain
+    /// stores 32 bytes that say nothing. This exists because the previous
+    /// design let an operator wait, read what everyone else had said, and copy
+    /// it — which produces the appearance of consensus while only one operator
+    /// actually checked anything, and makes slashing unfair to whoever did the
+    /// work.
+    ///
+    /// Copying somebody else's commitment is self-defeating: without their
+    /// salt you can never reveal it, and an unrevealed commitment is slashed
+    /// exactly like a wrong one.
+    pub fn commit_attestation(
+        ctx: Context<CommitAttestation>,
+        commitment: [u8; 32],
+    ) -> Result<()> {
         require!(
             ctx.accounts.policy.status == PolicyStatus::Requested
                 || ctx.accounts.policy.status == PolicyStatus::Escalated,
@@ -312,14 +321,77 @@ pub mod protocol {
             CoverError::StakeBelowMinimum
         );
 
+        let now = Clock::get()?.unix_timestamp;
+        let closes = ctx
+            .accounts
+            .tally
+            .opened_at
+            .checked_add(ctx.accounts.params.commit_window)
+            .ok_or(CoverError::MathOverflow)?;
+        require!(now < closes, CoverError::CommitWindowClosed);
+
         let attestation = &mut ctx.accounts.attestation;
         attestation.policy = ctx.accounts.policy.key();
         attestation.operator = ctx.accounts.operator.key();
+        attestation.commitment = commitment;
+        attestation.approved = false;
+        attestation.basis = String::new();
+        attestation.revealed = false;
+        attestation.resolved = false;
+        attestation.created_at = now;
+        attestation.bump = ctx.bumps.attestation;
+
+        let operator = &mut ctx.accounts.operator;
+        operator.attestations = operator.attestations.saturating_add(1);
+        operator.pending = operator.pending.saturating_add(1);
+
+        emit!(AttestationCommitted {
+            policy: attestation.policy,
+            operator: operator.authority,
+        });
+        Ok(())
+    }
+
+    /// Open the envelope. Only accepted once the commit window has closed —
+    /// an early reveal would hand the answer to everyone still deciding, which
+    /// is the leak the commit phase exists to prevent.
+    pub fn reveal_attestation(
+        ctx: Context<RevealAttestation>,
+        approved: bool,
+        basis: String,
+        salt: [u8; 32],
+    ) -> Result<()> {
+        require!(basis.len() <= 64, CoverError::BasisTooLong);
+        require!(!ctx.accounts.attestation.revealed, CoverError::AlreadyRevealed);
+
+        let now = Clock::get()?.unix_timestamp;
+        let opened = ctx.accounts.tally.opened_at;
+        let commit_closes = opened
+            .checked_add(ctx.accounts.params.commit_window)
+            .ok_or(CoverError::MathOverflow)?;
+        let reveal_closes = commit_closes
+            .checked_add(ctx.accounts.params.reveal_window)
+            .ok_or(CoverError::MathOverflow)?;
+        require!(now >= commit_closes, CoverError::CommitWindowOpen);
+        require!(now < reveal_closes, CoverError::RevealWindowClosed);
+
+        // Recompute the commitment and insist it matches. The operator key is
+        // in the preimage so a commitment cannot be lifted from one operator
+        // and replayed by another.
+        let mut preimage = Vec::with_capacity(1 + 32 + 32);
+        preimage.push(approved as u8);
+        preimage.extend_from_slice(&salt);
+        preimage.extend_from_slice(ctx.accounts.operator.key().as_ref());
+        let digest = solana_sha256_hasher::hash(&preimage);
+        require!(
+            digest.to_bytes() == ctx.accounts.attestation.commitment,
+            CoverError::CommitmentMismatch
+        );
+
+        let attestation = &mut ctx.accounts.attestation;
         attestation.approved = approved;
         attestation.basis = basis.clone();
-        attestation.created_at = Clock::get()?.unix_timestamp;
-        attestation.resolved = false;
-        attestation.bump = ctx.bumps.attestation;
+        attestation.revealed = true;
 
         let tally = &mut ctx.accounts.tally;
         if approved {
@@ -327,19 +399,11 @@ pub mod protocol {
         } else {
             tally.denials = tally.denials.saturating_add(1);
         }
-        // The evidence shown to the holder is the most recent one recorded.
         tally.basis = basis.clone();
 
-        // Counted against the operator until week 3 judges it. This is what
-        // stops an operator voting and then withdrawing its stake before the
-        // verdict lands.
-        let operator = &mut ctx.accounts.operator;
-        operator.attestations = operator.attestations.saturating_add(1);
-        operator.pending = operator.pending.saturating_add(1);
-
-        emit!(ClaimAttested {
+        emit!(AttestationRevealed {
             policy: attestation.policy,
-            operator: operator.authority,
+            operator: ctx.accounts.operator.authority,
             approved,
             basis,
         });
@@ -419,6 +483,181 @@ pub mod protocol {
         Ok(())
     }
 
+    /* -------------------------------------------------------------- */
+    /* M3 week 3: tunable parameters, slashing, stalled claims          */
+    /* -------------------------------------------------------------- */
+
+    /// Create the tunable parameter set.
+    ///
+    /// Separate from `Registry` because the registry is already live on devnet
+    /// and appending fields to a deployed account leaves it undeserializable —
+    /// the same reason the registry itself sits beside `Pool` rather than
+    /// inside it. It is also the account operator governance will own later:
+    /// keeping every knob in one place means handing over control is a change
+    /// of authority, not a migration.
+    pub fn initialize_params(
+        ctx: Context<InitializeParams>,
+        slash_bps: u16,
+        dispute_window: i64,
+        commit_window: i64,
+        reveal_window: i64,
+    ) -> Result<()> {
+        require!(slash_bps <= 10_000, CoverError::BadParameter);
+        require!(dispute_window > 0, CoverError::BadParameter);
+
+        let p = &mut ctx.accounts.params;
+        p.pool = ctx.accounts.pool.key();
+        p.authority = ctx.accounts.authority.key();
+        p.slash_bps = slash_bps;
+        p.dispute_window = dispute_window;
+        p.commit_window = commit_window;
+        p.reveal_window = reveal_window;
+        p.bump = ctx.bumps.params;
+        Ok(())
+    }
+
+    /// Retune the parameters. Admin today; operator vote later, which is why
+    /// every number the protocol argues about lives here rather than as a
+    /// constant in the binary.
+    pub fn set_params(
+        ctx: Context<SetParams>,
+        slash_bps: u16,
+        dispute_window: i64,
+        commit_window: i64,
+        reveal_window: i64,
+    ) -> Result<()> {
+        require!(slash_bps <= 10_000, CoverError::BadParameter);
+        require!(dispute_window > 0, CoverError::BadParameter);
+
+        let p = &mut ctx.accounts.params;
+        p.slash_bps = slash_bps;
+        p.dispute_window = dispute_window;
+        p.commit_window = commit_window;
+        p.reveal_window = reveal_window;
+        Ok(())
+    }
+
+    /// Judge one attestation against the outcome the claim actually settled to,
+    /// then credit or slash the operator who made it.
+    ///
+    /// Permissionless on purpose. If only the operator could call this, an
+    /// operator who expects to be slashed would simply never call it — and
+    /// their `pending` count would never clear, which is a lock, not a penalty.
+    ///
+    /// Worth being honest in the code about what this measures: the program
+    /// cannot see the flight. It compares an attestation to the settled
+    /// outcome, so this slashes *disagreement with the consensus*, not lying.
+    /// An operator who is right while the majority is wrong is punished by
+    /// this rule. Commit-reveal removes the incentive to copy, which is what
+    /// makes the rule defensible; it does not make the rule omniscient.
+    pub fn resolve_attestation(ctx: Context<ResolveAttestation>) -> Result<()> {
+        require!(
+            !ctx.accounts.attestation.resolved,
+            CoverError::AlreadyResolved
+        );
+
+        let settled_paid = ctx.accounts.policy.status == PolicyStatus::Paid;
+        let settled_denied = ctx.accounts.policy.status == PolicyStatus::Denied;
+        require!(settled_paid || settled_denied, CoverError::NotSettled);
+
+        let agreed = ctx.accounts.attestation.approved == settled_paid;
+
+        let mut slashed: u64 = 0;
+        if !agreed {
+            let stake = ctx.accounts.operator.stake;
+            let bps = ctx.accounts.params.slash_bps as u64;
+            slashed = stake
+                .checked_mul(bps)
+                .ok_or(CoverError::MathOverflow)?
+                / BPS_DENOM;
+
+            if slashed > 0 {
+                // Slashed stake goes to the payout vault, so it backs future
+                // claims. Deliberately not shared out among the agreeing
+                // operators: that would pay a majority to gang up on a
+                // minority, which is the failure mode this is meant to avoid.
+                let base = to_base_units(slashed, ctx.accounts.pool.decimals)?;
+                let pool_bump = ctx.accounts.pool.bump;
+                let seeds: &[&[u8]] = &[b"pool", core::slice::from_ref(&pool_bump)];
+                token::transfer(
+                    CpiContext::new_with_signer(
+                        ctx.accounts.token_program.to_account_info(),
+                        Transfer {
+                            from: ctx.accounts.stake_vault.to_account_info(),
+                            to: ctx.accounts.vault.to_account_info(),
+                            authority: ctx.accounts.pool.to_account_info(),
+                        },
+                        &[seeds],
+                    ),
+                    base,
+                )?;
+            }
+        }
+
+        let min_stake = ctx.accounts.registry.min_stake;
+        let operator = &mut ctx.accounts.operator;
+        if agreed {
+            operator.agreed = operator.agreed.saturating_add(1);
+        } else {
+            operator.stake = operator.stake.saturating_sub(slashed);
+            // Below the minimum an operator stops counting toward any
+            // threshold. It can top back up; it cannot keep voting on credit.
+            if operator.stake < min_stake {
+                operator.active = false;
+            }
+        }
+        operator.pending = operator.pending.saturating_sub(1);
+
+        let attestation = &mut ctx.accounts.attestation;
+        attestation.resolved = true;
+
+        emit!(AttestationResolved {
+            policy: attestation.policy,
+            operator: operator.authority,
+            agreed,
+            slashed,
+        });
+        Ok(())
+    }
+
+    /// Escalate a claim that nobody finished assessing.
+    ///
+    /// Permissionless once the dispute window has passed. Without this a claim
+    /// that never reaches the threshold sits `Requested` forever and the
+    /// holder has no path at all — the worst outcome the protocol can produce,
+    /// and one no operator has any incentive to fix.
+    pub fn escalate_stalled_claim(ctx: Context<EscalateStalled>) -> Result<()> {
+        require!(
+            ctx.accounts.policy.status == PolicyStatus::Requested,
+            CoverError::NotSettleable
+        );
+
+        let now = Clock::get()?.unix_timestamp;
+        let deadline = ctx
+            .accounts
+            .tally
+            .opened_at
+            .checked_add(ctx.accounts.params.dispute_window)
+            .ok_or(CoverError::MathOverflow)?;
+        require!(now >= deadline, CoverError::DisputeWindowOpen);
+
+        let threshold = ctx.accounts.registry.threshold;
+        require!(
+            ctx.accounts.tally.approvals < threshold && ctx.accounts.tally.denials < threshold,
+            CoverError::ThresholdMet
+        );
+
+        let policy = &mut ctx.accounts.policy;
+        policy.status = PolicyStatus::Escalated;
+        policy.basis = String::from("no quorum before deadline");
+
+        emit!(ClaimEscalated {
+            policy: policy.key(),
+            reason: String::from("no quorum before deadline"),
+        });
+        Ok(())
+    }
+
     /// The data was inconclusive: hand the claim to human verification rather
     /// than guessing. It stays settleable afterwards.
     pub fn escalate_claim(ctx: Context<EscalateClaim>, reason: String) -> Result<()> {
@@ -459,6 +698,25 @@ pub struct Pool {
     pub vault_bump: u8,
 }
 
+/// Every number the protocol argues about, in one account.
+///
+/// Admin-controlled today, operator-voted later — which is the whole reason
+/// these are account fields rather than constants in the binary.
+#[account]
+#[derive(InitSpace)]
+pub struct Params {
+    pub pool: Pubkey,
+    pub authority: Pubkey,
+    /// Basis points of an operator's stake taken for a wrong verdict.
+    pub slash_bps: u16,
+    /// Seconds a claim may sit without quorum before anyone can escalate it.
+    pub dispute_window: i64,
+    /// Commit-reveal windows, in seconds.
+    pub commit_window: i64,
+    pub reveal_window: i64,
+    pub bump: u8,
+}
+
 /// Running count of a single claim's attestations.
 ///
 /// Separate from `Policy` because policies are already live on devnet at a
@@ -487,11 +745,15 @@ pub struct ClaimTally {
 pub struct Attestation {
     pub policy: Pubkey,
     pub operator: Pubkey,
+    /// sha256(approved || salt || operator). Says nothing until revealed.
+    pub commitment: [u8; 32],
+    /// Meaningless until `revealed` is true.
     pub approved: bool,
     #[max_len(64)]
     pub basis: String,
     pub created_at: i64,
-    /// Set once week 3 has judged it, so stake accounting cannot double-count.
+    pub revealed: bool,
+    /// Set once the verdict has been judged, so stake cannot be double-counted.
     pub resolved: bool,
     pub bump: u8,
 }
@@ -802,21 +1064,21 @@ pub struct FileClaim<'info> {
 }
 
 #[derive(Accounts)]
-pub struct AttestClaim<'info> {
+pub struct CommitAttestation<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
 
     #[account(seeds = [b"pool"], bump = pool.bump)]
     pub pool: Account<'info, Pool>,
 
-    #[account(
-        seeds = [b"registry", pool.key().as_ref()],
-        bump = registry.bump
-    )]
+    #[account(seeds = [b"registry", pool.key().as_ref()], bump = registry.bump)]
     pub registry: Account<'info, Registry>,
 
-    /// Seeds bind this to the signer, so an operator can only ever attest as
-    /// itself — there is no account it could name to vote as someone else.
+    #[account(seeds = [b"params", pool.key().as_ref()], bump = params.bump)]
+    pub params: Account<'info, Params>,
+
+    /// Seeds bind this to the signer: an operator can only ever commit as
+    /// itself.
     #[account(
         mut,
         seeds = [b"operator", pool.key().as_ref(), authority.key().as_ref()],
@@ -826,21 +1088,16 @@ pub struct AttestClaim<'info> {
     pub operator: Account<'info, Operator>,
 
     #[account(
-        mut,
         seeds = [b"policy", policy.holder.as_ref(), &policy.nonce.to_le_bytes()],
         bump = policy.bump
     )]
     pub policy: Account<'info, Policy>,
 
-    #[account(
-        mut,
-        seeds = [b"tally", policy.key().as_ref()],
-        bump = tally.bump
-    )]
+    #[account(seeds = [b"tally", policy.key().as_ref()], bump = tally.bump)]
     pub tally: Account<'info, ClaimTally>,
 
-    /// One per (policy, operator). A second vote collides with an account that
-    /// already exists, so double-voting is impossible by construction.
+    /// One per (policy, operator). Committing twice collides with an account
+    /// that already exists, before any of our logic runs.
     #[account(
         init,
         payer = authority,
@@ -851,6 +1108,40 @@ pub struct AttestClaim<'info> {
     pub attestation: Account<'info, Attestation>,
 
     pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct RevealAttestation<'info> {
+    pub authority: Signer<'info>,
+
+    #[account(seeds = [b"pool"], bump = pool.bump)]
+    pub pool: Account<'info, Pool>,
+
+    #[account(seeds = [b"params", pool.key().as_ref()], bump = params.bump)]
+    pub params: Account<'info, Params>,
+
+    #[account(
+        seeds = [b"operator", pool.key().as_ref(), authority.key().as_ref()],
+        bump = operator.bump,
+        has_one = authority @ CoverError::NotOperator
+    )]
+    pub operator: Account<'info, Operator>,
+
+    #[account(
+        seeds = [b"policy", policy.holder.as_ref(), &policy.nonce.to_le_bytes()],
+        bump = policy.bump
+    )]
+    pub policy: Account<'info, Policy>,
+
+    #[account(mut, seeds = [b"tally", policy.key().as_ref()], bump = tally.bump)]
+    pub tally: Account<'info, ClaimTally>,
+
+    #[account(
+        mut,
+        seeds = [b"attest", policy.key().as_ref(), operator.key().as_ref()],
+        bump = attestation.bump
+    )]
+    pub attestation: Account<'info, Attestation>,
 }
 
 #[derive(Accounts)]
@@ -919,6 +1210,107 @@ pub struct EscalateClaim<'info> {
     pub policy: Account<'info, Policy>,
 }
 
+#[derive(Accounts)]
+pub struct InitializeParams<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    #[account(seeds = [b"pool"], bump = pool.bump, has_one = authority)]
+    pub pool: Account<'info, Pool>,
+
+    #[account(
+        init,
+        payer = authority,
+        space = 8 + Params::INIT_SPACE,
+        seeds = [b"params", pool.key().as_ref()],
+        bump
+    )]
+    pub params: Account<'info, Params>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct SetParams<'info> {
+    #[account(
+        mut,
+        seeds = [b"params", params.pool.as_ref()],
+        bump = params.bump,
+        has_one = authority
+    )]
+    pub params: Account<'info, Params>,
+    pub authority: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct ResolveAttestation<'info> {
+    /// Pays the fee. Checked against nothing — anyone may resolve, which is
+    /// what stops an operator avoiding a slash by never calling this.
+    pub cranker: Signer<'info>,
+
+    #[account(seeds = [b"pool"], bump = pool.bump)]
+    pub pool: Account<'info, Pool>,
+
+    #[account(seeds = [b"registry", pool.key().as_ref()], bump = registry.bump)]
+    pub registry: Account<'info, Registry>,
+
+    #[account(seeds = [b"params", pool.key().as_ref()], bump = params.bump)]
+    pub params: Account<'info, Params>,
+
+    #[account(
+        seeds = [b"policy", policy.holder.as_ref(), &policy.nonce.to_le_bytes()],
+        bump = policy.bump
+    )]
+    pub policy: Account<'info, Policy>,
+
+    #[account(
+        mut,
+        seeds = [b"attest", policy.key().as_ref(), operator.key().as_ref()],
+        bump = attestation.bump
+    )]
+    pub attestation: Account<'info, Attestation>,
+
+    #[account(
+        mut,
+        seeds = [b"operator", pool.key().as_ref(), operator.authority.as_ref()],
+        bump = operator.bump
+    )]
+    pub operator: Account<'info, Operator>,
+
+    #[account(mut, seeds = [b"stake_vault", pool.key().as_ref()], bump = registry.stake_vault_bump)]
+    pub stake_vault: Account<'info, TokenAccount>,
+
+    #[account(mut, seeds = [b"vault", pool.key().as_ref()], bump = pool.vault_bump)]
+    pub vault: Account<'info, TokenAccount>,
+
+    pub token_program: Program<'info, Token>,
+}
+
+#[derive(Accounts)]
+pub struct EscalateStalled<'info> {
+    /// Anyone. A stalled claim is everyone's problem and nobody's job.
+    pub cranker: Signer<'info>,
+
+    #[account(seeds = [b"pool"], bump = pool.bump)]
+    pub pool: Account<'info, Pool>,
+
+    #[account(seeds = [b"registry", pool.key().as_ref()], bump = registry.bump)]
+    pub registry: Account<'info, Registry>,
+
+    #[account(seeds = [b"params", pool.key().as_ref()], bump = params.bump)]
+    pub params: Account<'info, Params>,
+
+    #[account(
+        mut,
+        seeds = [b"policy", policy.holder.as_ref(), &policy.nonce.to_le_bytes()],
+        bump = policy.bump
+    )]
+    pub policy: Account<'info, Policy>,
+
+    #[account(seeds = [b"tally", policy.key().as_ref()], bump = tally.bump)]
+    pub tally: Account<'info, ClaimTally>,
+}
+
 /* ------------------------------------------------------------------ */
 /* events + errors                                                     */
 /* ------------------------------------------------------------------ */
@@ -955,11 +1347,25 @@ pub struct ClaimEscalated {
 }
 
 #[event]
-pub struct ClaimAttested {
+pub struct AttestationCommitted {
+    pub policy: Pubkey,
+    pub operator: Pubkey,
+}
+
+#[event]
+pub struct AttestationRevealed {
     pub policy: Pubkey,
     pub operator: Pubkey,
     pub approved: bool,
     pub basis: String,
+}
+
+#[event]
+pub struct AttestationResolved {
+    pub policy: Pubkey,
+    pub operator: Pubkey,
+    pub agreed: bool,
+    pub slashed: u64,
 }
 
 #[event]
@@ -1013,4 +1419,24 @@ pub enum CoverError {
     ThresholdNotMet,
     #[msg("Operator is not active")]
     OperatorInactive,
+    #[msg("Parameter is outside the permitted range")]
+    BadParameter,
+    #[msg("This attestation has already been judged")]
+    AlreadyResolved,
+    #[msg("The claim has not settled yet")]
+    NotSettled,
+    #[msg("The dispute window has not closed")]
+    DisputeWindowOpen,
+    #[msg("The threshold was met; settle it instead of escalating")]
+    ThresholdMet,
+    #[msg("The commit window has closed")]
+    CommitWindowClosed,
+    #[msg("The commit window is still open")]
+    CommitWindowOpen,
+    #[msg("The reveal window has closed")]
+    RevealWindowClosed,
+    #[msg("This attestation was already revealed")]
+    AlreadyRevealed,
+    #[msg("Revealed verdict does not match the commitment")]
+    CommitmentMismatch,
 }
