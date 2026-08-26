@@ -89,7 +89,7 @@ WSL):
 ```bash
 cd protocol
 anchor build
-anchor test --provider.cluster localnet   # 31 tests on a throwaway validator
+anchor test --provider.cluster localnet   # 32 tests on a throwaway validator
 ```
 
 `--provider.cluster localnet` matters: `Anchor.toml` points at devnet so that

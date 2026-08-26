@@ -789,6 +789,39 @@ describe("crypsurance protocol", () => {
       }
     });
 
+    it("lets an operator reveal after the claim has already settled", async () => {
+      // A claim settles the moment the threshold is reached, which can leave
+      // other operators still holding sealed commitments. If revealing were
+      // refused at that point they would be slashed as no-shows for being
+      // slow rather than wrong -- the exact failure this mechanism exists to
+      // prevent. scripts/oracle.js relies on this being allowed, so it is
+      // pinned here rather than left as an assumption about the program.
+      const policy = await claimable();
+      const a = await commit(opA, policy, true);
+      const b = await commit(opB, policy, true);
+      const c = await commit(opC, policy, true);
+      await closeCommitWindow();
+
+      await reveal(opA, policy, true, a.salt);
+      await reveal(opB, policy, true, b.salt);
+      await settle(policy);
+      const settled = await program.account.policy.fetch(policy);
+      assert.equal(Object.keys(settled.status)[0], "paid", "precondition: settled");
+
+      // the straggler opens its envelope after the fact
+      await reveal(opC, policy, true, c.salt);
+      const att = await program.account.attestation.fetch(
+        attestPda(policy, operatorPda(opC.publicKey))
+      );
+      assert.isTrue(att.revealed, "a late reveal is still a reveal");
+
+      const before = await program.account.operator.fetch(operatorPda(opC.publicKey));
+      await resolve(opC, policy);
+      const after = await program.account.operator.fetch(operatorPda(opC.publicKey));
+      assert.equal(after.stake.toNumber(), before.stake.toNumber(), "not slashed");
+      assert.equal(after.agreed.toNumber(), before.agreed.toNumber() + 1, "credited");
+    });
+
     it("pays nothing to an operator that got it wrong", async () => {
       const policy = await claimable();
       const a = await commit(opA, policy, true);

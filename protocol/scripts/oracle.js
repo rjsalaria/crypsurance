@@ -214,7 +214,15 @@ async function verifyFlight(flight, date, apiKey) {
   }
 
   /* ---------------- 2. reveal once the window closes ---------------- */
-  for (const { publicKey: policy, account: a } of open) {
+  // Deliberately every policy, not just the open ones. A claim settles as soon
+  // as the threshold is reached, which can happen while other operators are
+  // still holding sealed commitments. reveal_attestation does not care whether
+  // the policy settled -- it checks the commitment and the window and nothing
+  // else -- and an operator that never reveals is slashed as a no-show. Iterate
+  // only the open claims and you slash honest operators for being slow rather
+  // than wrong, which is the exact failure this whole mechanism exists to
+  // avoid.
+  for (const { publicKey: policy, account: a } of all) {
     const attestationPda = pda([
       Buffer.from("attest"),
       policy.toBuffer(),
@@ -326,6 +334,27 @@ async function verifyFlight(flight, date, apiKey) {
     if (att.createdAt.toNumber() === 0) {
       console.log(`  ${policy.toBase58().slice(0, 8)}… -> pre-migration attestation, ignored`);
       continue;
+    }
+
+    // An unrevealed commitment is only a no-show once the window has shut. The
+    // program enforces this, so attempting it early is a guaranteed failure --
+    // and one that used to abort the whole run, taking every later claim with
+    // it. It is a normal state, not an error.
+    if (!att.revealed) {
+      const tally = await program.account.claimTally.fetch(
+        pda([Buffer.from("tally"), policy.toBuffer()])
+      );
+      const revealCloses =
+        tally.openedAt.toNumber() +
+        cfg.commitWindow.toNumber() +
+        cfg.revealWindow.toNumber();
+      if (now < revealCloses) {
+        const mins = Math.ceil((revealCloses - now) / 60);
+        console.log(
+          `  ${policy.toBase58().slice(0, 8)}… -> unrevealed, ${mins} min left to reveal`
+        );
+        continue;
+      }
     }
 
     console.log(`⚖ ${policy.toBase58().slice(0, 8)}… -> judging our own verdict`);
