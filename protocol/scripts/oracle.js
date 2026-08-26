@@ -1,5 +1,5 @@
 /**
- * CrypSurance claims oracle — reads Policy accounts and settles them.
+ * CrypSurance claims operator — commits, reveals, settles and resolves.
  *
  *   RPC_URL=... KEYPAIR_PATH=... node scripts/oracle.js [--dry-run]
  *
@@ -7,17 +7,36 @@
  * us serves account reads from Cloudflare's IP ranges: Helius' free tier
  * rejects getAccountInfo/getMultipleAccounts/getProgramAccounts outright, and
  * Solana's public RPC blocks Cloudflare. From a normal host the public RPC
- * answers all of them, so the oracle lives here and the Worker keeps the
+ * answers all of them, so the operator lives here and the Worker keeps the
  * faucet, the RPC proxy and the heartbeat.
  *
- * As of M3 this process is one registered operator among several, not the
- * oracle. It attests; it does not decide. Settlement happens only when the
- * registry's threshold of operators agree, and the crank that triggers it is
+ * This process is one registered operator among several, not the oracle. It
+ * attests; it does not decide. A claim settles only when the registry's
+ * threshold of operators agree, and the crank that triggers settlement is
  * permissionless — running it here is convenience, not authority. The payout
  * still goes to the policy's own holder from a program-owned vault.
+ *
+ * ── Why there is no state file ────────────────────────────────────────────
+ * Verdicts are sealed: an operator commits sha256(verdict, salt, operator) and
+ * reveals only after the commit window closes. That normally means keeping a
+ * salt between two runs — impossible here, because each scheduled run is a
+ * fresh CI container with nothing carried over.
+ *
+ * So the salt is *derived* rather than stored: sha256(secret key, policy). It
+ * is reproducible on any run, unique per claim, and underivable by anyone
+ * without this operator's key.
+ *
+ * The verdict itself is recovered the same way. At reveal time we do not
+ * re-query the flight API — if the feed had changed its answer we would reveal
+ * something that no longer matches the commitment, and the reveal would be
+ * rejected. Instead we take the commitment already on chain and test it
+ * against both possible verdicts. Only one matches, and that is what we
+ * committed to. A verdict is one bit; knowing the salt is what makes it
+ * recoverable, and only we know the salt.
  */
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const anchor = require("@coral-xyz/anchor");
 const { PublicKey, Keypair, Connection, SystemProgram } = require("@solana/web3.js");
 const { getAssociatedTokenAddress, TOKEN_PROGRAM_ID } = require("@solana/spl-token");
@@ -32,6 +51,17 @@ function clean(v, name) {
   if (name && s.startsWith(name + "=")) s = s.slice(name.length + 1).trim();
   return s;
 }
+
+const sha256 = (...parts) =>
+  crypto.createHash("sha256").update(Buffer.concat(parts)).digest();
+
+/** Reproducible per (operator, policy), and secret to this operator. */
+const saltFor = (kp, policy) =>
+  sha256(Buffer.from(kp.secretKey), policy.toBuffer());
+
+/** Must match the program byte for byte. */
+const commitmentFor = (approved, salt, operatorAccount) =>
+  sha256(Buffer.from([approved ? 1 : 0]), salt, operatorAccount.toBuffer());
 
 async function verifyFlight(flight, date, apiKey) {
   if (flight.startsWith("TEST-DELAY"))
@@ -69,131 +99,239 @@ async function verifyFlight(flight, date, apiKey) {
 (async () => {
   const rpc = clean(process.env.RPC_URL, "RPC_URL") || "https://api.devnet.solana.com";
   const apiKey = clean(process.env.AVIATIONSTACK_KEY, "AVIATIONSTACK_KEY");
-  const kpPath = process.env.KEYPAIR_PATH;
-  if (!kpPath) throw new Error("set KEYPAIR_PATH to the oracle keypair");
+  const kpPath =
+    process.env.KEYPAIR_PATH || path.join(process.env.HOME, ".config/solana/id.json");
 
-  const oracle = Keypair.fromSecretKey(
+  const me = Keypair.fromSecretKey(
     Uint8Array.from(JSON.parse(fs.readFileSync(kpPath, "utf8")))
   );
   const connection = new Connection(rpc, "confirmed");
-  const provider = new anchor.AnchorProvider(
-    connection,
-    new anchor.Wallet(oracle),
-    { commitment: "confirmed" }
-  );
+  const provider = new anchor.AnchorProvider(connection, new anchor.Wallet(me), {
+    commitment: "confirmed",
+  });
   anchor.setProvider(provider);
 
-  // idl/ is committed; target/ is a build artifact and absent in CI.
-  const idlPath = [
-    path.join(__dirname, "../idl/protocol.json"),
-    path.join(__dirname, "../target/idl/protocol.json"),
-  ].find((p) => fs.existsSync(p));
-  if (!idlPath) throw new Error("protocol IDL not found");
-  const idl = JSON.parse(fs.readFileSync(idlPath, "utf8"));
+  const idl = JSON.parse(
+    fs.readFileSync(path.join(__dirname, "../idl/protocol.json"), "utf8")
+  );
   const program = new anchor.Program(idl, provider);
 
-  const [pool] = PublicKey.findProgramAddressSync([Buffer.from("pool")], program.programId);
-  const [vault] = PublicKey.findProgramAddressSync(
-    [Buffer.from("vault"), pool.toBuffer()],
-    program.programId
-  );
+  const pda = (seeds) => PublicKey.findProgramAddressSync(seeds, program.programId)[0];
+  const pool = pda([Buffer.from("pool")]);
+  const registry = pda([Buffer.from("registry"), pool.toBuffer()]);
+  const params = pda([Buffer.from("params"), pool.toBuffer()]);
+  const stakeVault = pda([Buffer.from("stake_vault"), pool.toBuffer()]);
+  const vault = pda([Buffer.from("vault"), pool.toBuffer()]);
+  const operatorAccount = pda([
+    Buffer.from("operator"),
+    pool.toBuffer(),
+    me.publicKey.toBuffer(),
+  ]);
 
-  const [registry] = PublicKey.findProgramAddressSync(
-    [Buffer.from("registry"), pool.toBuffer()],
-    program.programId
-  );
+  const op = await connection.getAccountInfo(operatorAccount);
+  if (!op) {
+    console.error(
+      `not a registered operator: ${me.publicKey.toBase58()}\n` +
+        "run scripts/register-operators.js first — attesting is the only way to influence a claim"
+    );
+    process.exit(1);
+  }
+
+  const cfg = await program.account.params.fetch(params);
+  const reg = await program.account.registry.fetch(registry);
+  const now = Math.floor(Date.now() / 1000);
 
   const all = await program.account.policy.all();
   const status = (a) => Object.keys(a.status)[0];
-  const pending = all.filter((p) => status(p.account) === "requested");
-  const awaiting = all.filter((p) => status(p.account) === "escalated");
+  const open = all.filter((p) => ["requested", "escalated"].includes(status(p.account)));
+  const settled = all.filter((p) => ["paid", "denied"].includes(status(p.account)));
 
   console.log(
-    `${all.length} policies · ${pending.length} pending · ${awaiting.length} awaiting offline verification${DRY_RUN ? "  (dry run)" : ""}`
+    `${all.length} policies · ${open.length} open · operator ${me.publicKey
+      .toBase58()
+      .slice(0, 8)}…${DRY_RUN ? "  (dry run)" : ""}`
   );
 
-  for (const { publicKey: policy, account: a } of pending) {
-    const holderToken = await getAssociatedTokenAddress(SURETY_MINT, a.holder);
-    const [tally] = PublicKey.findProgramAddressSync(
-      [Buffer.from("tally"), policy.toBuffer()],
-      program.programId
+  /* ---------------- 1. commit a sealed verdict ---------------------- */
+  for (const { publicKey: policy, account: a } of open) {
+    const attestation = pda([
+      Buffer.from("attest"),
+      policy.toBuffer(),
+      operatorAccount.toBuffer(),
+    ]);
+    if (await connection.getAccountInfo(attestation)) continue; // already committed
+
+    const tally = await program.account.claimTally.fetch(
+      pda([Buffer.from("tally"), policy.toBuffer()])
     );
-    const [operatorAccount] = PublicKey.findProgramAddressSync(
-      [Buffer.from("operator"), pool.toBuffer(), oracle.publicKey.toBuffer()],
-      program.programId
-    );
-    const [attestation] = PublicKey.findProgramAddressSync(
-      [Buffer.from("attest"), policy.toBuffer(), operatorAccount.toBuffer()],
-      program.programId
-    );
+    if (now >= tally.openedAt.toNumber() + cfg.commitWindow.toNumber()) {
+      console.log(`  ${a.flight} ${a.date} -> commit window closed, cannot vote`);
+      continue;
+    }
 
     const verdict = await verifyFlight(a.flight, a.date, apiKey);
-
-    // Inconclusive data escalates to human verification rather than guessing.
-    // On-chain status caps the paid flight API at one call per claim: once
-    // escalated the policy is no longer `requested`, so it is never re-checked.
     if (verdict.skip) {
-      console.log(`? ${a.flight} ${a.date} -> ESCALATE (${verdict.reason})`);
-      if (DRY_RUN) continue;
-      const sig = await program.methods
-        .escalateClaim(verdict.reason.slice(0, 64))
-        .accountsPartial({ oracle: oracle.publicKey, pool, policy })
-        .rpc();
-      console.log(`   ${sig}`);
+      console.log(`? ${a.flight} ${a.date} -> no verdict (${verdict.reason})`);
       continue;
     }
 
     console.log(
-      `${verdict.delayed ? "✓" : "✗"} ${a.flight} ${a.date} -> ${verdict.delayed ? "PAY" : "DENY"} ${a.payout} SURETY [${verdict.basis}]`
+      `⊕ ${a.flight} ${a.date} -> commit ${verdict.delayed ? "PAY" : "DENY"} (sealed)`
     );
     if (DRY_RUN) continue;
 
-    // Attest, unless this operator already has. Its own vote settles nothing:
-    // the program counts attestations and only pays once the registry's
-    // threshold agrees.
-    if (!(await connection.getAccountInfo(attestation))) {
-      const sig = await program.methods
-        .attestClaim(verdict.delayed, verdict.basis)
-        .accountsPartial({
-          authority: oracle.publicKey,
-          pool,
-          registry,
-          operator: operatorAccount,
-          policy,
-          tally,
-          attestation,
-          systemProgram: SystemProgram.programId,
-        })
-        .rpc();
-      console.log(`   attested ${sig}`);
-    } else {
-      console.log("   already attested");
+    const salt = saltFor(me, policy);
+    const sig = await program.methods
+      .commitAttestation([...commitmentFor(verdict.delayed, salt, operatorAccount)])
+      .accountsPartial({
+        authority: me.publicKey,
+        pool,
+        registry,
+        params,
+        operator: operatorAccount,
+        policy,
+        tally: pda([Buffer.from("tally"), policy.toBuffer()]),
+        attestation,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+    console.log(`   committed ${sig}`);
+  }
+
+  /* ---------------- 2. reveal once the window closes ---------------- */
+  for (const { publicKey: policy, account: a } of open) {
+    const attestationPda = pda([
+      Buffer.from("attest"),
+      policy.toBuffer(),
+      operatorAccount.toBuffer(),
+    ]);
+    const info = await connection.getAccountInfo(attestationPda);
+    if (!info) continue;
+
+    const att = await program.account.attestation.fetch(attestationPda);
+    if (att.revealed) continue;
+
+    const tally = await program.account.claimTally.fetch(
+      pda([Buffer.from("tally"), policy.toBuffer()])
+    );
+    const commitCloses = tally.openedAt.toNumber() + cfg.commitWindow.toNumber();
+    const revealCloses = commitCloses + cfg.revealWindow.toNumber();
+    if (now < commitCloses) {
+      const mins = Math.ceil((commitCloses - now) / 60);
+      console.log(`  ${a.flight} ${a.date} -> sealed, reveal opens in ${mins} min`);
+      continue;
+    }
+    if (now >= revealCloses) {
+      console.log(`  ${a.flight} ${a.date} -> reveal window missed; this vote will be slashed`);
+      continue;
     }
 
-    // Then crank settlement if the threshold is now met. Anyone may do this —
-    // running it here is convenience, not authority.
-    const t = await program.account.claimTally.fetch(tally);
-    const reg = await program.account.registry.fetch(registry);
-    if (t.approvals >= reg.threshold || t.denials >= reg.threshold) {
-      const sig = await program.methods
-        .settleClaim()
-        .accountsPartial({
-          cranker: oracle.publicKey,
-          pool,
-          registry,
-          policy,
-          tally,
-          vault,
-          holderToken,
-          tokenProgram: TOKEN_PROGRAM_ID,
-        })
-        .rpc();
-      console.log(`   settled ${sig}`);
-    } else {
-      console.log(
-        `   ${t.approvals}/${reg.threshold} approvals — waiting for other operators`
-      );
+    // Recover what we committed to by testing both possibilities against the
+    // commitment already on chain. No stored state, no second API call.
+    const salt = saltFor(me, policy);
+    const stored = Buffer.from(att.commitment);
+    let approved = null;
+    for (const guess of [true, false]) {
+      if (commitmentFor(guess, salt, operatorAccount).equals(stored)) {
+        approved = guess;
+        break;
+      }
     }
+    if (approved === null) {
+      console.log(
+        `  ${a.flight} ${a.date} -> cannot recover our own verdict (wrong key?), skipping`
+      );
+      continue;
+    }
+
+    console.log(`⊙ ${a.flight} ${a.date} -> reveal ${approved ? "PAY" : "DENY"}`);
+    if (DRY_RUN) continue;
+
+    const basis = a.flight.startsWith("TEST-") ? "testnet-simulated" : "verified by operator";
+    const sig = await program.methods
+      .revealAttestation(approved, basis, [...salt])
+      .accountsPartial({
+        authority: me.publicKey,
+        pool,
+        params,
+        operator: operatorAccount,
+        policy,
+        tally: pda([Buffer.from("tally"), policy.toBuffer()]),
+        attestation: attestationPda,
+      })
+      .rpc();
+    console.log(`   revealed ${sig}`);
+  }
+
+  /* ---------------- 3. settle anything that has quorum -------------- */
+  for (const { publicKey: policy, account: a } of open) {
+    const tally = await program.account.claimTally.fetch(
+      pda([Buffer.from("tally"), policy.toBuffer()])
+    );
+    if (tally.approvals < reg.threshold && tally.denials < reg.threshold) {
+      console.log(
+        `  ${a.flight} ${a.date} -> ${tally.approvals}/${reg.threshold} approvals, ${tally.denials} denials — waiting`
+      );
+      continue;
+    }
+
+    console.log(`✓ ${a.flight} ${a.date} -> threshold met, settling`);
+    if (DRY_RUN) continue;
+
+    const holderToken = await getAssociatedTokenAddress(SURETY_MINT, a.holder);
+    const sig = await program.methods
+      .settleClaim()
+      .accountsPartial({
+        cranker: me.publicKey,
+        pool,
+        registry,
+        policy,
+        tally: pda([Buffer.from("tally"), policy.toBuffer()]),
+        vault,
+        holderToken,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .rpc();
+    console.log(`   settled ${sig}`);
+  }
+
+  /* ---------------- 4. take our credit, or our slash ---------------- */
+  for (const { publicKey: policy } of settled) {
+    const attestationPda = pda([
+      Buffer.from("attest"),
+      policy.toBuffer(),
+      operatorAccount.toBuffer(),
+    ]);
+    if (!(await connection.getAccountInfo(attestationPda))) continue;
+    const att = await program.account.attestation.fetch(attestationPda);
+    if (att.resolved) continue;
+    // Accounts written before commit-reveal are shorter than the current
+    // layout, so they read back as zeros rather than failing. The program
+    // rejects them; skip them here too, or every run dies on the same four.
+    if (att.createdAt.toNumber() === 0) {
+      console.log(`  ${policy.toBase58().slice(0, 8)}… -> pre-migration attestation, ignored`);
+      continue;
+    }
+
+    console.log(`⚖ ${policy.toBase58().slice(0, 8)}… -> judging our own verdict`);
+    if (DRY_RUN) continue;
+
+    const sig = await program.methods
+      .resolveAttestation()
+      .accountsPartial({
+        cranker: me.publicKey,
+        pool,
+        registry,
+        params,
+        policy,
+        attestation: attestationPda,
+        operator: operatorAccount,
+        stakeVault,
+        vault,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .rpc();
+    console.log(`   resolved ${sig}`);
   }
 
   console.log("done");

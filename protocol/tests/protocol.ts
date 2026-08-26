@@ -45,6 +45,9 @@ describe("crypsurance protocol", () => {
   const opA = Keypair.generate();
   const opB = Keypair.generate();
   const opC = Keypair.generate();
+  // a clean operator for the no-show test — the others have been slashed or
+  // have verdicts outstanding by the time it runs
+  const opD = Keypair.generate();
 
   let mint: PublicKey;
   let pool: PublicKey;
@@ -224,6 +227,7 @@ describe("crypsurance protocol", () => {
         registry,
         params,
         policy,
+        tally: tallyPda(policy),
         attestation: attestPda(policy, operatorAccount),
         operator: operatorAccount,
         stakeVault,
@@ -235,7 +239,7 @@ describe("crypsurance protocol", () => {
   }
 
   before(async () => {
-    for (const kp of [oracle, holder, stranger, opA, opB, opC]) {
+    for (const kp of [oracle, holder, stranger, opA, opB, opC, opD]) {
       const sig = await conn.requestAirdrop(kp.publicKey, 2 * LAMPORTS_PER_SOL);
       await conn.confirmTransaction(sig, "confirmed");
     }
@@ -253,7 +257,7 @@ describe("crypsurance protocol", () => {
     await mintTo(conn, admin, mint, holderToken, admin, ui(100_000));
 
     // and the operators, so they can stake
-    for (const kp of [opA, opB, opC]) {
+    for (const kp of [opA, opB, opC, opD]) {
       const ata = (
         await getOrCreateAssociatedTokenAccount(conn, admin, mint, kp.publicKey)
       ).address;
@@ -675,6 +679,39 @@ describe("crypsurance protocol", () => {
       // the slashed stake backs future payouts rather than paying the majority
       const vaultAfter = (await getAccount(conn, vault)).amount;
       assert.equal(vaultAfter - vaultBefore, ui(before - expected));
+    });
+
+    it("slashes an operator that sealed a verdict and never opened it", async () => {
+      await register(opD);
+      const policy = await claimable();
+      const a = await commit(opA, policy, true);
+      const b = await commit(opB, policy, true);
+      await commit(opD, policy, true); // opD commits and then goes silent
+      await closeCommitWindow();
+      await reveal(opA, policy, true, a.salt);
+      await reveal(opB, policy, true, b.salt);
+      await settle(policy);
+
+      // while revealing is still possible, a silent operator cannot be judged
+      try {
+        await resolve(opD, policy);
+        assert.fail("judged a sealed verdict while it could still be opened");
+      } catch (e: any) {
+        assert.include(e.toString(), "RevealWindowOpen");
+      }
+
+      // once the reveal window shuts, silence costs the same as being wrong
+      await setWindows(0, 0);
+      const before = (
+        await program.account.operator.fetch(operatorPda(opD.publicKey))
+      ).stake.toNumber();
+      await resolve(opD, policy);
+      const after = (
+        await program.account.operator.fetch(operatorPda(opD.publicKey))
+      ).stake.toNumber();
+
+      assert.isBelow(after, before, "a no-show is slashed");
+      assert.equal(after, before - Math.floor((before * SLASH_BPS) / 10_000));
     });
 
     it("will not judge the same attestation twice", async () => {

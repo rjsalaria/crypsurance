@@ -555,12 +555,39 @@ pub mod protocol {
             !ctx.accounts.attestation.resolved,
             CoverError::AlreadyResolved
         );
+        // An attestation with no creation time is not one this program wrote.
+        // Accounts created before commit-reveal are shorter than this struct,
+        // so they deserialize into zeros rather than failing — and judging
+        // those zeros would slash an operator over bytes that were never a
+        // verdict. Rejecting them is cheaper than trusting a layout that
+        // changed underneath them.
+        require!(
+            ctx.accounts.attestation.created_at > 0,
+            CoverError::MalformedAttestation
+        );
 
         let settled_paid = ctx.accounts.policy.status == PolicyStatus::Paid;
         let settled_denied = ctx.accounts.policy.status == PolicyStatus::Denied;
         require!(settled_paid || settled_denied, CoverError::NotSettled);
 
-        let agreed = ctx.accounts.attestation.approved == settled_paid;
+        // A sealed verdict that was never opened is not a verdict. It counts
+        // as a no-show and is slashed like a wrong answer — otherwise the
+        // cheapest strategy is to commit noise and stay silent, which costs
+        // nothing and still occupies a slot in the operator set.
+        let agreed = if ctx.accounts.attestation.revealed {
+            ctx.accounts.attestation.approved == settled_paid
+        } else {
+            let now = Clock::get()?.unix_timestamp;
+            let reveal_closes = ctx
+                .accounts
+                .tally
+                .opened_at
+                .checked_add(ctx.accounts.params.commit_window)
+                .and_then(|t| t.checked_add(ctx.accounts.params.reveal_window))
+                .ok_or(CoverError::MathOverflow)?;
+            require!(now >= reveal_closes, CoverError::RevealWindowOpen);
+            false
+        };
 
         let mut slashed: u64 = 0;
         if !agreed {
@@ -1263,6 +1290,9 @@ pub struct ResolveAttestation<'info> {
     )]
     pub policy: Account<'info, Policy>,
 
+    #[account(seeds = [b"tally", policy.key().as_ref()], bump = tally.bump)]
+    pub tally: Account<'info, ClaimTally>,
+
     #[account(
         mut,
         seeds = [b"attest", policy.key().as_ref(), operator.key().as_ref()],
@@ -1439,4 +1469,8 @@ pub enum CoverError {
     AlreadyRevealed,
     #[msg("Revealed verdict does not match the commitment")]
     CommitmentMismatch,
+    #[msg("The reveal window is still open")]
+    RevealWindowOpen,
+    #[msg("This attestation predates the current account layout")]
+    MalformedAttestation,
 }

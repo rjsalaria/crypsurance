@@ -1396,6 +1396,27 @@ export type Protocol = {
           }
         },
         {
+          "name": "tally",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  97,
+                  108,
+                  108,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "policy"
+              }
+            ]
+          }
+        },
+        {
           "name": "attestation",
           "writable": true,
           "pda": {
@@ -2383,6 +2404,16 @@ export type Protocol = {
       "code": 6027,
       "name": "commitmentMismatch",
       "msg": "Revealed verdict does not match the commitment"
+    },
+    {
+      "code": 6028,
+      "name": "revealWindowOpen",
+      "msg": "The reveal window is still open"
+    },
+    {
+      "code": 6029,
+      "name": "malformedAttestation",
+      "msg": "This attestation predates the current account layout"
     }
   ],
   "types": [
