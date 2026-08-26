@@ -60,6 +60,13 @@ jobs:
           DEVNET_KEYPAIR: ${{ secrets.DEVNET_KEYPAIR }}
           AVIATIONSTACK_KEY: ${{ secrets.AVIATIONSTACK_KEY }}
 
+      # The three passes share one runner IP, and the public RPC limits per IP
+      # over a rolling window. Run them back to back and the third one is
+      # refused -- which is exactly how this job failed, every time, as
+      # operator B. Waiting is cheaper than a retry storm.
+      - name: Pause under the RPC rate limit
+        run: sleep 20
+
       - name: Attest as operator A
         working-directory: protocol
         run: |
@@ -72,6 +79,13 @@ jobs:
         env:
           OPERATOR_A_KEYPAIR: ${{ secrets.OPERATOR_A_KEYPAIR }}
           AVIATIONSTACK_KEY: ${{ secrets.AVIATIONSTACK_KEY }}
+
+      # The three passes share one runner IP, and the public RPC limits per IP
+      # over a rolling window. Run them back to back and the third one is
+      # refused -- which is exactly how this job failed, every time, as
+      # operator B. Waiting is cheaper than a retry storm.
+      - name: Pause under the RPC rate limit
+        run: sleep 20
 
       - name: Attest as operator B
         working-directory: protocol
