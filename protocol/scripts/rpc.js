@@ -15,7 +15,7 @@
  * Only transport failures and the RPC's own overload responses are retried.
  * A 4xx means we asked for something wrong and asking again will not fix it.
  */
-const { Connection } = require("@solana/web3.js");
+const { Connection, SYSVAR_CLOCK_PUBKEY } = require("@solana/web3.js");
 
 // Solana's public devnet RPC limits per IP over a rolling ~10s window, and the
 // oracle job runs three operator passes back to back from one runner. The
@@ -71,9 +71,39 @@ async function retryingFetch(input, init) {
   throw lastErr;
 }
 
+/**
+ * The cluster's own idea of the time, in seconds.
+ *
+ * Every window in the program is checked against Clock::get(), which is derived
+ * from slot progression and drifts behind wall time -- on devnet by a minute or
+ * more. Deciding locally that a commit window has closed and then acting on it
+ * is how you get CommitWindowOpen back from a program that is simply still
+ * living in the past. Ask the chain instead.
+ *
+ * unix_timestamp is the fifth field of the Clock sysvar: slot u64,
+ * epoch_start_timestamp i64, epoch u64, leader_schedule_epoch u64, then it --
+ * so it starts at byte 32.
+ */
+async function chainNow(connection) {
+  const info = await connection.getAccountInfo(SYSVAR_CLOCK_PUBKEY);
+  if (!info) throw new Error("could not read the clock sysvar");
+  return Number(info.data.readBigInt64LE(32));
+}
+
+/** Block until the cluster's clock passes `deadline`, reporting as it waits. */
+async function waitForChainTime(connection, deadline, label = "window") {
+  for (;;) {
+    const now = await chainNow(connection);
+    const left = deadline - now;
+    if (left <= 0) return now;
+    console.log(`   ${label}: ${left}s left by the chain's clock…`);
+    await sleep(Math.min(left, 30) * 1000 + 1000);
+  }
+}
+
 /** A `confirmed` Connection to `rpc` that retries transient failures. */
 function makeConnection(rpc, commitment = "confirmed") {
   return new Connection(rpc, { commitment, fetch: retryingFetch });
 }
 
-module.exports = { makeConnection, retryingFetch };
+module.exports = { makeConnection, retryingFetch, chainNow, waitForChainTime };

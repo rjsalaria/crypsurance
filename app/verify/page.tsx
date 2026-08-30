@@ -175,14 +175,23 @@ export default function VerifyPage() {
             From one operator to a network
           </h2>
           <p className="mt-2 text-sm text-muted max-w-3xl leading-relaxed">
-            Today the oracle operator is the protocol team — every verification
-            it makes is recorded on-chain where you can audit it. The roadmap
-            decentralizes exactly this role: independent verifiers will stake
-            SURETY to earn verification fees, answers will require M-of-N
-            consensus across verifiers using independent data sources, and
-            wrong answers will be slashed. Offline verification requests —
-            today handled by partners — become bounties any staked community
-            verifier can earn by resolving with evidence.
+            No single key can settle a claim any more. Operators stake SURETY to
+            register, and a claim needs a threshold of them to agree before it
+            pays. Verdicts are sealed first and opened afterwards, so no
+            operator can see how the others voted before committing — otherwise
+            copying the majority is free, and a consensus of copies is not a
+            consensus. An operator whose verdict contradicts the settled outcome
+            loses part of its stake; one that matches earns a share of the
+            premium. Settlement itself is permissionless: once the threshold
+            agrees, anyone can crank it.
+          </p>
+          <p className="mt-3 text-sm text-muted max-w-3xl leading-relaxed">
+            What is <span className="font-semibold">not</span> true yet: the
+            registered operators are still ours, running from one place. The
+            mechanism is permissionless — anyone can register and stake — but an
+            operator set that isn&apos;t us is the next milestone, not a claim we
+            get to make today. Offline verification requests remain partner
+            handled, and become bounties any staked verifier can earn.
           </p>
         </div>
       </section>

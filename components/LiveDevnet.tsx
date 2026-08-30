@@ -602,10 +602,11 @@ function MyPolicies({
           </table>
           <p className="mt-3 text-[10px] text-muted max-w-xl">
             Tip: click a policy number to open your bond certificate. Claims are
-            verified by the testnet oracle operator — TEST-DELAY approves
-            instantly, TEST-ONTIME is denied, real flights are checked against
-            live flight data. Payouts arrive from the pool wallet with the
-            verification recorded on-chain.
+            verified by staked operators who must reach a threshold before
+            anything pays — TEST-DELAY approves, TEST-ONTIME is denied, real
+            flights are checked against live flight data. Each verdict is sealed
+            on commit and opened afterwards, and every step is recorded
+            on-chain.
           </p>
         </div>
       )}

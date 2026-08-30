@@ -38,7 +38,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const anchor = require("@coral-xyz/anchor");
-const { makeConnection, retryingFetch } = require("./rpc");
+const { makeConnection, retryingFetch, chainNow } = require("./rpc");
 const { PublicKey, Keypair, SystemProgram } = require("@solana/web3.js");
 const { getAssociatedTokenAddress, TOKEN_PROGRAM_ID } = require("@solana/spl-token");
 
@@ -154,7 +154,12 @@ async function verifyFlight(flight, date, apiKey) {
 
   const cfg = await program.account.params.fetch(params);
   const reg = await program.account.registry.fetch(registry);
-  const now = Math.floor(Date.now() / 1000);
+  // The chain's clock, not this machine's. Every window the program enforces is
+  // checked against Clock::get(), which lags wall time. Deciding locally that a
+  // commit window has closed and then acting on it earns a CommitWindowOpen
+  // from a program that is simply still living in the past -- and that error
+  // aborts the run.
+  const now = await chainNow(connection);
 
   const all = await program.account.policy.all();
   const status = (a) => Object.keys(a.status)[0];
