@@ -319,6 +319,20 @@ export default function VerificationConsole() {
                       <div className="space-y-2">
                         {all.map((a) => {
                           const isLegacy = a.createdAt === 0;
+                          // What the judgement concluded, derived the same way
+                          // the program derives it: a verdict matching the
+                          // settled outcome is credited, one contradicting it
+                          // loses stake. "resolved" alone only says the
+                          // judgement happened, which is identical on every
+                          // row and tells a reader nothing.
+                          const settledPaid = p.status === "paid";
+                          const outcome = !a.resolved
+                            ? null
+                            : a.approved === null
+                              ? "noshow"
+                              : a.approved === settledPaid
+                                ? "credited"
+                                : "slashed";
                           const who = authorityOf.get(a.operator);
                           return (
                             <div
@@ -345,9 +359,24 @@ export default function VerificationConsole() {
                                   deny
                                 </span>
                               )}
-                              {a.resolved && (
+                              {!isLegacy && outcome === null && (
                                 <span className="text-[10px] text-muted/70">
-                                  judged against the outcome
+                                  not yet judged
+                                </span>
+                              )}
+                              {outcome === "credited" && (
+                                <span className="text-[10px] text-lime-neon/90">
+                                  matched the outcome · credited
+                                </span>
+                              )}
+                              {outcome === "slashed" && (
+                                <span className="text-[10px] text-magenta-neon">
+                                  contradicted the outcome · stake slashed
+                                </span>
+                              )}
+                              {outcome === "noshow" && (
+                                <span className="text-[10px] text-magenta-neon">
+                                  never opened · slashed as a no-show
                                 </span>
                               )}
                               {a.basis && (
