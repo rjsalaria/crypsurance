@@ -15,6 +15,9 @@ const eslintConfig = defineConfig([
     // linting them buried the real findings under ~90 spurious errors.
     "crypsurance-site/**",
     "faucet-worker/dist/**",
+    // Competition material, kept out of git entirely. Not source, and the deck
+    // generator is a standalone CommonJS script run by hand.
+    "colosseum/**",
     "protocol/target/**",
   ]),
   {

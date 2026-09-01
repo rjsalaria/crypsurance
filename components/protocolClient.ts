@@ -34,6 +34,9 @@ export const TOKEN_PROGRAM = new PublicKey(
 const IX_BUY_COVER = [43, 59, 234, 123, 199, 21, 0, 167];
 const IX_FILE_CLAIM = [187, 254, 40, 13, 146, 223, 230, 97];
 const POLICY_DISCRIMINATOR = [222, 135, 7, 163, 235, 177, 33, 68];
+const ATTESTATION_DISCRIMINATOR = [152, 125, 183, 86, 36, 146, 121, 73];
+const OPERATOR_DISCRIMINATOR = [219, 31, 188, 145, 69, 139, 204, 117];
+const REGISTRY_DISCRIMINATOR = [47, 174, 110, 246, 184, 182, 252, 218];
 
 /** Declaration order of PolicyStatus in the program. */
 const STATUS = ["active", "requested", "escalated", "paid", "denied"] as const;
@@ -51,6 +54,45 @@ export type OnChainPolicy = {
   createdAt: number;
   settledAt: number;
   basis: string;
+};
+
+
+/**
+ * One operator's verdict on one claim.
+ *
+ * `approved` is deliberately `boolean | null` rather than `boolean`. On chain
+ * it is a bool that means nothing until `revealed` is true — the commitment is
+ * the only real content before that. Typing it as a plain boolean would let a
+ * caller render `false` as "denied" for a verdict nobody has opened yet, which
+ * would publish exactly what commit-reveal exists to hide. null means sealed.
+ */
+export type OnChainAttestation = {
+  address: string;
+  policy: string;
+  /** The Operator PDA, not the operator's wallet. Join via OnChainOperator. */
+  operator: string;
+  approved: boolean | null;
+  basis: string;
+  createdAt: number;
+  revealed: boolean;
+  resolved: boolean;
+};
+
+export type OnChainOperator = {
+  address: string;
+  authority: string;
+  stake: number;
+  attestations: number;
+  agreed: number;
+  pending: number;
+  active: boolean;
+  registeredAt: number;
+};
+
+export type OnChainRegistry = {
+  threshold: number;
+  minStake: number;
+  operatorCount: number;
 };
 
 /* ---------------------------------------------------------------- */
@@ -304,6 +346,220 @@ export async function fetchAllPolicies(
     .map((a) => decodePolicy(new Uint8Array(a.account.data), a.pubkey))
     .filter((p): p is OnChainPolicy => p !== null)
     .sort((a, b) => b.createdAt - a.createdAt);
+}
+
+
+/* ---------------------------------------------------------------- */
+/* consensus: who verified a claim, and what they said               */
+/* ---------------------------------------------------------------- */
+
+/** Shared cursor over an account body, after the 8-byte discriminator. */
+function reader(data: Uint8Array) {
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  const decoder = new TextDecoder();
+  let o = 8;
+  return {
+    key: () => {
+      const k = new PublicKey(data.subarray(o, o + 32));
+      o += 32;
+      return k;
+    },
+    skip: (n: number) => {
+      o += n;
+    },
+    u8: () => data[o++],
+    bool: () => data[o++] === 1,
+    u16: () => {
+      const v = view.getUint16(o, true);
+      o += 2;
+      return v;
+    },
+    u32: () => {
+      const v = view.getUint32(o, true);
+      o += 4;
+      return v;
+    },
+    u64: () => {
+      const v = view.getBigUint64(o, true);
+      o += 8;
+      return Number(v);
+    },
+    i64: () => {
+      const v = view.getBigInt64(o, true);
+      o += 8;
+      return Number(v);
+    },
+    str: () => {
+      const len = view.getUint32(o, true);
+      o += 4;
+      const t = decoder.decode(data.subarray(o, o + len));
+      o += len;
+      return t;
+    },
+  };
+}
+
+const matches = (data: Uint8Array, disc: number[]) => {
+  if (data.length < 8) return false;
+  for (let i = 0; i < 8; i++) if (data[i] !== disc[i]) return false;
+  return true;
+};
+
+/**
+ * Decoding reads fixed offsets, and an account written by an older layout is
+ * shorter than the current struct — DataView throws past the end rather than
+ * returning zeros. This is a public page reading whatever the program owns,
+ * including accounts from before a layout change, so one legacy record must
+ * not take the whole console down. Undecodable means absent, not fatal.
+ */
+function tryDecode<T>(fn: () => T | null): T | null {
+  try {
+    return fn();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Layout after the discriminator:
+ *   policy 32 | operator 32 | commitment 32 | approved u8 | basis str
+ *   | created_at i64 | revealed u8 | resolved u8 | bump u8
+ */
+export function decodeAttestation(
+  data: Uint8Array,
+  address: PublicKey
+): OnChainAttestation | null {
+  return tryDecode(() => decodeAttestationInner(data, address));
+}
+
+function decodeAttestationInner(
+  data: Uint8Array,
+  address: PublicKey
+): OnChainAttestation | null {
+  if (!matches(data, ATTESTATION_DISCRIMINATOR)) return null;
+  const r = reader(data);
+  const policy = r.key();
+  const operator = r.key();
+  r.skip(32); // commitment — proves the verdict was fixed, but reveals nothing
+  const approvedBit = r.bool();
+  const basis = r.str();
+  const createdAt = r.i64();
+  const revealed = r.bool();
+  const resolved = r.bool();
+
+  return {
+    address: address.toBase58(),
+    policy: policy.toBase58(),
+    operator: operator.toBase58(),
+    // Sealed until opened. See the note on OnChainAttestation.
+    approved: revealed ? approvedBit : null,
+    basis,
+    createdAt,
+    revealed,
+    resolved,
+  };
+}
+
+/**
+ * Layout after the discriminator:
+ *   pool 32 | authority 32 | stake u64 | attestations u64 | agreed u64
+ *   | pending u32 | active u8 | registered_at i64 | bump u8
+ */
+export function decodeOperator(
+  data: Uint8Array,
+  address: PublicKey
+): OnChainOperator | null {
+  return tryDecode(() => decodeOperatorInner(data, address));
+}
+
+function decodeOperatorInner(
+  data: Uint8Array,
+  address: PublicKey
+): OnChainOperator | null {
+  if (!matches(data, OPERATOR_DISCRIMINATOR)) return null;
+  const r = reader(data);
+  r.skip(32); // pool
+  const authority = r.key();
+  return {
+    address: address.toBase58(),
+    authority: authority.toBase58(),
+    stake: r.u64(),
+    attestations: r.u64(),
+    agreed: r.u64(),
+    pending: r.u32(),
+    active: r.bool(),
+    registeredAt: r.i64(),
+  };
+}
+
+/**
+ * Layout after the discriminator:
+ *   pool 32 | authority 32 | threshold u8 | min_stake u64 | operator_count u16
+ *   | bump u8 | stake_vault_bump u8
+ */
+export function decodeRegistry(data: Uint8Array): OnChainRegistry | null {
+  return tryDecode(() => decodeRegistryInner(data));
+}
+
+function decodeRegistryInner(data: Uint8Array): OnChainRegistry | null {
+  if (!matches(data, REGISTRY_DISCRIMINATOR)) return null;
+  const r = reader(data);
+  r.skip(64); // pool, authority
+  return {
+    threshold: r.u8(),
+    minStake: r.u64(),
+    operatorCount: r.u16(),
+  };
+}
+
+export function registryPda(pool: PublicKey): PublicKey {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("registry"), pool.toBuffer()],
+    PROGRAM_ID
+  )[0];
+}
+
+/** Every attestation the program holds, for the public verifier console. */
+export async function fetchAttestations(
+  connection: Connection
+): Promise<OnChainAttestation[]> {
+  const accounts = await withRetry(() =>
+    connection.getProgramAccounts(PROGRAM_ID, {
+      filters: [
+        { memcmp: { offset: 0, bytes: bs58FromBytes(ATTESTATION_DISCRIMINATOR) } },
+      ],
+    })
+  );
+  return accounts
+    .map((a) => decodeAttestation(new Uint8Array(a.account.data), a.pubkey))
+    .filter((a): a is OnChainAttestation => a !== null);
+}
+
+/** The registered operator set. */
+export async function fetchOperators(
+  connection: Connection
+): Promise<OnChainOperator[]> {
+  const accounts = await withRetry(() =>
+    connection.getProgramAccounts(PROGRAM_ID, {
+      filters: [
+        { memcmp: { offset: 0, bytes: bs58FromBytes(OPERATOR_DISCRIMINATOR) } },
+      ],
+    })
+  );
+  return accounts
+    .map((a) => decodeOperator(new Uint8Array(a.account.data), a.pubkey))
+    .filter((o): o is OnChainOperator => o !== null)
+    .sort((a, b) => a.registeredAt - b.registeredAt);
+}
+
+/** Threshold and set size — how many operators a claim needs. */
+export async function fetchRegistry(
+  connection: Connection
+): Promise<OnChainRegistry | null> {
+  const info = await withRetry(() =>
+    connection.getAccountInfo(registryPda(poolPda()))
+  );
+  return info ? decodeRegistry(new Uint8Array(info.data)) : null;
 }
 
 /**

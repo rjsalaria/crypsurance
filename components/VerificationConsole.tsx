@@ -1,10 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { makeDevnetConnection } from "./chainClient";
 import {
   fetchAllPolicies,
+  fetchAttestations,
+  fetchOperators,
+  fetchRegistry,
+  type OnChainAttestation,
+  type OnChainOperator,
   type OnChainPolicy,
+  type OnChainRegistry,
   type PolicyStatus,
 } from "./protocolClient";
 
@@ -51,6 +57,10 @@ const statusMeta: Record<
 export default function VerificationConsole() {
   const connection = useMemo(() => makeDevnetConnection(), []);
   const [policies, setPolicies] = useState<OnChainPolicy[] | null>(null);
+  const [attestations, setAttestations] = useState<OnChainAttestation[]>([]);
+  const [operators, setOperators] = useState<OnChainOperator[]>([]);
+  const [registry, setRegistry] = useState<OnChainRegistry | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState("");
 
@@ -58,7 +68,22 @@ export default function VerificationConsole() {
     setScanning(true);
     setError("");
     try {
-      setPolicies(await fetchAllPolicies(connection));
+      // The policy ledger is the page; the consensus detail is an enrichment.
+      // Read them together but let the detail fail on its own, so a busy RPC
+      // costs the expandable rows rather than the whole console.
+      const [ledger, detail] = await Promise.all([
+        fetchAllPolicies(connection),
+        Promise.allSettled([
+          fetchAttestations(connection),
+          fetchOperators(connection),
+          fetchRegistry(connection),
+        ]),
+      ]);
+      setPolicies(ledger);
+      const [atts, ops, reg] = detail;
+      if (atts.status === "fulfilled") setAttestations(atts.value);
+      if (ops.status === "fulfilled") setOperators(ops.value);
+      if (reg.status === "fulfilled") setRegistry(reg.value);
     } catch {
       setError("Devnet RPC is busy — try Refresh in a few seconds.");
     } finally {
@@ -73,6 +98,27 @@ export default function VerificationConsole() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     scan();
   }, [scan]);
+
+  // Attestations name the Operator PDA, not a wallet. Join so the console can
+  // show an address a reader can look up.
+  const authorityOf = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const o of operators) m.set(o.address, o.authority);
+    return m;
+  }, [operators]);
+
+  const byPolicy = useMemo(() => {
+    const m = new Map<string, OnChainAttestation[]>();
+    for (const a of attestations) {
+      const list = m.get(a.policy) ?? [];
+      list.push(a);
+      m.set(a.policy, list);
+    }
+    // Stable order, so the same claim reads the same way on every refresh.
+    for (const list of m.values())
+      list.sort((x, y) => x.operator.localeCompare(y.operator));
+    return m;
+  }, [attestations]);
 
   const rows = policies ?? [];
   const openVerifications = rows.filter((p) => p.status === "escalated");
@@ -166,12 +212,26 @@ export default function VerificationConsole() {
                 <th className="py-2.5 pr-4">Policy</th>
                 <th className="py-2.5 pr-4">Flight</th>
                 <th className="py-2.5 pr-4">Holder</th>
+                <th className="py-2.5 pr-4">Verified by</th>
                 <th className="py-2.5">What the chain says</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((p) => (
-                <tr key={p.address} className="border-b border-muted/10 last:border-0">
+              {rows.map((p) => {
+              const all = byPolicy.get(p.address) ?? [];
+              // created_at is zero on records written before commit-reveal
+              // existed. The program refuses to judge them and they can never
+              // be opened, so they are not "sealed" — counting them as pending
+              // verdicts would promise something that is never coming.
+              const atts = all.filter((a) => a.createdAt > 0);
+              const legacy = all.length - atts.length;
+              const revealed = atts.filter((a) => a.approved !== null);
+              const sealed = atts.length - revealed.length;
+              const agreed = revealed.filter((a) => a.approved === true).length;
+              const expanded = open === p.address;
+              return (
+                <Fragment key={p.address}>
+                <tr className="border-b border-muted/10">
                   <td className="py-3 pr-4 align-top">
                     <span className={`px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusMeta[p.status].cls}`}>
                       {statusMeta[p.status].label}
@@ -185,6 +245,43 @@ export default function VerificationConsole() {
                   </td>
                   <td className="py-3 pr-4 align-top font-mono text-xs text-muted">
                     {short(p.holder)}
+                  </td>
+                  <td className="py-3 pr-4 align-top">
+                    {all.length === 0 ? (
+                      <span className="text-[11px] text-muted/60">—</span>
+                    ) : (
+                      <button
+                        onClick={() => setOpen(expanded ? null : p.address)}
+                        className="text-left group"
+                      >
+                        {revealed.length === 0 ? (
+                          // Nothing opened yet. Saying "0 of N agreed" here
+                          // would report a disagreement that has not happened.
+                          <span className="font-mono text-xs whitespace-nowrap text-cyan-neon">
+                            {atts.length > 0
+                              ? `${atts.length} sealed`
+                              : "before commit–reveal"}
+                          </span>
+                        ) : (
+                          <>
+                            <span className="font-mono text-xs whitespace-nowrap">
+                              <span className="text-lime-neon">{agreed}</span>
+                              <span className="text-muted"> of </span>
+                              <span>{revealed.length}</span>
+                              <span className="text-muted"> agreed</span>
+                            </span>
+                            {sealed > 0 && (
+                              <span className="ml-1.5 text-[10px] text-cyan-neon whitespace-nowrap">
+                                · {sealed} sealed
+                              </span>
+                            )}
+                          </>
+                        )}
+                        <span className="block text-[10px] text-muted/70 group-hover:text-cyan-neon transition-colors">
+                          {expanded ? "hide" : "who said what"} {expanded ? "▴" : "▾"}
+                        </span>
+                      </button>
+                    )}
                   </td>
                   <td className="py-3 align-top">
                     <div className="max-w-64">
@@ -207,7 +304,75 @@ export default function VerificationConsole() {
                     </div>
                   </td>
                 </tr>
-              ))}
+                {expanded && (
+                  <tr className="border-b border-muted/10 bg-void/40">
+                    <td colSpan={6} className="px-4 py-4">
+                      <p className="text-[11px] text-muted mb-3">
+                        Each operator committed a sealed verdict, then opened it
+                        after the window closed. Nobody could see another&apos;s
+                        answer before committing.
+                        {registry &&
+                          ` ${registry.threshold} of ${registry.operatorCount} have to agree before a claim pays.`}
+                        {legacy > 0 &&
+                          " Records marked before commit–reveal predate this mechanism; the program will not judge them."}
+                      </p>
+                      <div className="space-y-2">
+                        {all.map((a) => {
+                          const isLegacy = a.createdAt === 0;
+                          const who = authorityOf.get(a.operator);
+                          return (
+                            <div
+                              key={a.address}
+                              className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs"
+                            >
+                              <span className="font-mono text-muted w-28 shrink-0">
+                                {who ? short(who) : short(a.operator)}
+                              </span>
+                              {isLegacy ? (
+                                <span className="px-2 py-0.5 rounded-full bg-muted/15 text-muted font-semibold">
+                                  written before commit–reveal
+                                </span>
+                              ) : a.approved === null ? (
+                                <span className="px-2 py-0.5 rounded-full bg-cyan-neon/15 text-cyan-neon font-semibold">
+                                  sealed — not yet opened
+                                </span>
+                              ) : a.approved ? (
+                                <span className="px-2 py-0.5 rounded-full bg-lime-neon/15 text-lime-neon font-semibold">
+                                  pay
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded-full bg-magenta-neon/15 text-magenta-neon font-semibold">
+                                  deny
+                                </span>
+                              )}
+                              {a.resolved && (
+                                <span className="text-[10px] text-muted/70">
+                                  judged against the outcome
+                                </span>
+                              )}
+                              {a.basis && (
+                                <span className="font-mono text-[10px] text-muted/70 break-all">
+                                  {a.basis}
+                                </span>
+                              )}
+                              <a
+                                href={`https://explorer.solana.com/address/${a.address}?cluster=devnet`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[10px] text-cyan-neon hover:underline ml-auto"
+                              >
+                                attestation →
+                              </a>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
+              );
+              })}
             </tbody>
           </table>
         </div>

@@ -22,6 +22,9 @@ import { PublicKey } from "@solana/web3.js";
 import bs58 from "bs58";
 import {
   PROGRAM_ID,
+  decodeAttestation,
+  decodeOperator,
+  decodeRegistry,
   bs58FromBytes,
   buyCoverIx,
   decodePolicy,
@@ -314,4 +317,123 @@ test("PROGRAM_ID is the deployed program", () => {
     PROGRAM_ID.toBase58(),
     "4V7SWWpKRqFF5QZhPYKBMxHeEag3g2Cr1mhbtaSUjtdr"
   );
+});
+
+
+/* ---------------------------------------------------------------- */
+/* consensus accounts                                                */
+/* ---------------------------------------------------------------- */
+
+/**
+ * Real devnet accounts, captured as bytes. The expected values below came from
+ * Anchor decoding the same accounts, so these assert the hand-rolled decoder
+ * agrees with the generated one on data the program actually wrote.
+ */
+const FIXTURES = {
+  attestation: {
+    address: "6bF5wwvAwZfBP7TQFqdeZRDsFWvmbWwuXGvgVmWQuBqh",
+    b64: "mH23ViSSeUl7ZkWuMW4Aty0dzIBLcN4Ue+9XpGxtDDNQCWsPwV4Wd5vqtX/2ewR4hfHDSq6ZedJrv677uVawukqizOmM4IVpk1Ui+ijDnIYmAp3NSe85VYydKqdKiGv7I9Rb7qNzjDsBEQAAAHRlc3RuZXQtc2ltdWxhdGVkz8uOagAAAAABAf8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+  },
+  operator: {
+    address: "9NxTE5R2c3QDgxZTcyhWBWWPZiba5M5QeveLffbA4t37",
+    b64: "2x+8kUWLzHUnExwg/Wu9P914rEdCU+B95rgHfARERGQ+s6cddfxT8qVPiJViWr5w7Q3nYLlV1opVOAKQFqVXPPOBnBubMqZliBMAAAAAAAAEAAAAAAAAAAQAAAAAAAAAAAAAAAHWoYFqAAAAAP8=",
+  },
+  registry: {
+    b64: "L65u9ri2/NonExwg/Wu9P914rEdCU+B95rgHfARERGQ+s6cddfxT8l+dPY2G5j/ITpovEYmkAwoEPOA5L0ZpoeCTVGYmg4icAugDAAAAAAAABAD/+w==",
+  },
+};
+
+const bytes = (b64: string) => new Uint8Array(Buffer.from(b64, "base64"));
+
+test("decodeAttestation matches what Anchor read from the same account", () => {
+  const a = decodeAttestation(
+    bytes(FIXTURES.attestation.b64),
+    new PublicKey(FIXTURES.attestation.address)
+  );
+  assert.ok(a, "fixture failed to decode");
+  assert.equal(a.policy, "9JhbcrxkLt8Co7kRt3v4udSbQNfLCDReanSrDgAprQQE");
+  assert.equal(a.operator, "BVdmiY8SbxopDL3U12XxyCPWHme66LcN7ocu3mVre5ix");
+  assert.equal(a.approved, true);
+  assert.equal(a.basis, "testnet-simulated");
+  assert.equal(a.createdAt, 1787743183);
+  assert.equal(a.revealed, true);
+  assert.equal(a.resolved, true);
+});
+
+test("decodeOperator matches what Anchor read from the same account", () => {
+  const o = decodeOperator(
+    bytes(FIXTURES.operator.b64),
+    new PublicKey(FIXTURES.operator.address)
+  );
+  assert.ok(o, "fixture failed to decode");
+  assert.equal(o.authority, "C8JcNzprFvNZTcpr19a1hFEehuXP888Nh1CjMZrsdVTr");
+  assert.equal(o.stake, 5000);
+  assert.equal(o.attestations, 4);
+  assert.equal(o.agreed, 4);
+  assert.equal(o.pending, 0);
+  assert.equal(o.active, true);
+  assert.equal(o.registeredAt, 1786880470);
+});
+
+test("decodeRegistry reads the threshold a claim has to reach", () => {
+  const r = decodeRegistry(bytes(FIXTURES.registry.b64));
+  assert.ok(r, "fixture failed to decode");
+  assert.equal(r.threshold, 2);
+  assert.equal(r.minStake, 1000);
+  assert.equal(r.operatorCount, 4);
+});
+
+/**
+ * The one that matters. A sealed attestation still carries an `approved` bit on
+ * chain — it is simply meaningless until the operator reveals. If the decoder
+ * passed that bit through, the verifier console would display a verdict nobody
+ * has opened yet, which is precisely what commit-reveal exists to prevent.
+ *
+ * The buffer is built here rather than captured, so the case is tested even
+ * when devnet happens to hold no sealed attestations.
+ */
+test("a sealed attestation never reports a verdict, even though the bit is set", () => {
+  const d = disc("account:Attestation");
+  const basis = Buffer.from("");
+  const buf = Buffer.concat([
+    Buffer.from(d),
+    Buffer.alloc(32, 1), // policy
+    Buffer.alloc(32, 2), // operator
+    Buffer.alloc(32, 3), // commitment
+    Buffer.from([1]), // approved = TRUE on chain
+    (() => {
+      const len = Buffer.alloc(4);
+      len.writeUInt32LE(basis.length);
+      return Buffer.concat([len, basis]);
+    })(),
+    (() => {
+      const t = Buffer.alloc(8);
+      t.writeBigInt64LE(1787743183n);
+      return t;
+    })(),
+    Buffer.from([0]), // revealed = false
+    Buffer.from([0]), // resolved
+    Buffer.from([255]), // bump
+  ]);
+
+  const a = decodeAttestation(new Uint8Array(buf), PublicKey.default);
+  assert.ok(a, "sealed attestation failed to decode");
+  assert.equal(a.revealed, false);
+  assert.equal(
+    a.approved,
+    null,
+    "a sealed verdict leaked as a boolean — the UI would render it"
+  );
+});
+
+test("the consensus discriminators are the ones Anchor derives", () => {
+  for (const name of ["Attestation", "Operator", "Registry"]) {
+    const wrong = decodeAttestation(
+      new Uint8Array(Buffer.concat([Buffer.from(disc(`account:${name}`)), Buffer.alloc(200)])),
+      PublicKey.default
+    );
+    // Only the Attestation discriminator may decode as an attestation.
+    if (name === "Attestation") assert.ok(wrong, `${name} should decode`);
+    else assert.equal(wrong, null, `${name} decoded as an Attestation`);
+  }
 });
