@@ -1,0 +1,7 @@
+1:"$Sreact.fragment"
+2:I[51897,["/_next/static/chunks/3kbrl-7r8k_h6.js","/_next/static/chunks/153tbw49q_1m9.js","/_next/static/chunks/1q3oyvq63lslf.js"],"default"]
+3:I[22016,["/_next/static/chunks/3kbrl-7r8k_h6.js","/_next/static/chunks/153tbw49q_1m9.js","/_next/static/chunks/1q3oyvq63lslf.js"],""]
+4:I[97367,["/_next/static/chunks/3kbrl-7r8k_h6.js","/_next/static/chunks/153tbw49q_1m9.js"],"OutletBoundary"]
+5:"$Sreact.suspense"
+0:{"rsc":["$","$1","c",{"children":[["$","section",null,{"className":"px-4 sm:px-6 py-24","children":[["$","$L2",null,{}],["$","div",null,{"className":"mx-auto max-w-xl glass-card px-6 py-10 text-center","children":[["$","h1",null,{"className":"font-display text-2xl font-bold","children":"This page moved"}],["$","p",null,{"className":"mt-3 text-sm text-muted","children":["It now lives at ",["$","span",null,{"className":"font-mono","children":"/devnet"}]," — the protocol runs on Solana devnet, which is a different network from Solana testnet."]}],["$","$L3",null,{"href":"/devnet/","className":"btn-gradient mt-6 inline-block rounded-xl px-6 py-3 font-display font-bold text-white","children":"Continue to the devnet app →"}]]}]]}],[["$","script","script-0",{"src":"/_next/static/chunks/1q3oyvq63lslf.js","async":true}]],["$","$L4",null,{"children":["$","$5",null,{"name":"Next.MetadataOutlet","children":"$@6"}]}]]}],"isPartial":false,"staleTime":300,"varyParams":null,"buildId":"y0irFYoKYZ4zHdF0luj6n"}
+6:null
