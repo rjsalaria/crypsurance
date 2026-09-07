@@ -307,20 +307,35 @@ async function verifyFlight(flight, date, apiKey) {
     if (DRY_RUN) continue;
 
     const holderToken = await getAssociatedTokenAddress(SURETY_MINT, a.holder);
-    const sig = await program.methods
-      .settleClaim()
-      .accountsPartial({
-        cranker: me.publicKey,
-        pool,
-        registry,
-        policy,
-        tally: pda([Buffer.from("tally"), policy.toBuffer()]),
-        vault,
-        holderToken,
-        tokenProgram: TOKEN_PROGRAM_ID,
-      })
-      .rpc();
-    console.log(`   settled ${sig}`);
+    try {
+      const sig = await program.methods
+        .settleClaim()
+        .accountsPartial({
+          cranker: me.publicKey,
+          pool,
+          registry,
+          policy,
+          tally: pda([Buffer.from("tally"), policy.toBuffer()]),
+          vault,
+          holderToken,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .rpc();
+      console.log(`   settled ${sig}`);
+    } catch (e) {
+      // The operators now run concurrently, on separate runners, so more than
+      // one can see the same quorum and race to crank it. Exactly one wins.
+      // Losing that race is the system working -- settlement is permissionless
+      // precisely so it does not depend on which operator gets there first --
+      // and it must not fail the loser's run or skip the passes after this one.
+      const now = await program.account.policy.fetch(policy);
+      const st = Object.keys(now.status)[0];
+      if (st === "paid" || st === "denied") {
+        console.log(`   already settled ${st} by another operator`);
+      } else {
+        console.log(`   could not settle: ${e.message || e}`);
+      }
+    }
   }
 
   /* ---------------- 4. take our credit, or our slash ---------------- */

@@ -129,9 +129,15 @@ it *can't* do to you:
 - **Consensus is real; the operators are still ours.** A verdict now needs
   M-of-N staked operators, sealed by commit-reveal so none of them can see how
   the others voted before committing, and an operator that ends up contradicting
-  the settled outcome loses a slice of its stake. All three keys are still run
-  by us on one machine, so this proves the *mechanism*, not yet the
-  independence. Separate infrastructure is the next milestone.
+  the settled outcome loses a slice of its stake.
+
+  Each operator runs as its own CI job on its own runner, so they no longer
+  share a machine, an IP, or a fate — one failing does not stop the others
+  attesting. That is **separate infrastructure, not independent operation**:
+  same provider, same repository's secrets, same person. It proves the
+  mechanism and removes a shared point of failure; it does not make the
+  operator set independent of us. An operator that isn't ours is the milestone
+  that would, and registration has been permissionless since week 1.
 - **Operators are paid, in play money.** A correct verdict earns a share of the
   premium the holder already paid. It is a real incentive in a fake currency;
   read it as a working design, not a yield.

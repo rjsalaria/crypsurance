@@ -293,8 +293,18 @@ const PROTOCOL_PROGRAM_ID = "4V7SWWpKRqFF5QZhPYKBMxHeEag3g2Cr1mhbtaSUjtdr";
  * The dApp therefore calls getProgramAccounts directly from the browser (see
  * UNPROXYABLE in components/chainClient.ts). Kept wired up so that pointing
  * this at an upstream that does serve it is a one-line change.
+ *
+ * Retested 2026-09-06 while looking for a way to host an operator here. Of the
+ * keyless devnet endpoints, only api.devnet.solana.com answers
+ * getProgramAccounts at all, and that is the one blocking us; dRPC and Ankr
+ * require a paid plan or an API key, publicnode returns non-JSON, genesysgo is
+ * gone. So running an operator in this Worker needs a keyed RPC (QuickNode or
+ * Alchemy free tier both serve getProgramAccounts) — set GPA_RPC_URL as a
+ * secret and this reads it. Until then the operators live in GitHub Actions,
+ * one job each.
  */
-const GPA_RPC = "https://api.devnet.solana.com";
+const GPA_RPC_DEFAULT = "https://api.devnet.solana.com";
+const gpaRpc = (env) => cleanStr(env.GPA_RPC_URL, "GPA_RPC_URL") || GPA_RPC_DEFAULT;
 
 /* ------------------------------------------------------------------ */
 /* oracle trigger                                                      */
@@ -381,7 +391,7 @@ async function handleRpc(request, env, origin) {
     }
   }
   const upstream = needsGpaRpc
-    ? GPA_RPC
+    ? gpaRpc(env)
     : cleanStr(env.RPC_URL, "RPC_URL") || "https://api.devnet.solana.com";
   const res = await fetch(upstream, {
     method: "POST",
