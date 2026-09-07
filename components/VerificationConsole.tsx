@@ -226,8 +226,15 @@ export default function VerificationConsole() {
               const atts = all.filter((a) => a.createdAt > 0);
               const legacy = all.length - atts.length;
               const revealed = atts.filter((a) => a.approved !== null);
-              const sealed = atts.length - revealed.length;
               const agreed = revealed.filter((a) => a.approved === true).length;
+              // Unrevealed splits two ways, and calling both "sealed" promises
+              // a verdict that is never coming for one of them. Sealed means
+              // still openable. Once the program has resolved an unrevealed
+              // commitment the window has shut and it was slashed as a
+              // no-show -- which the detail rows already say, so the summary
+              // must not contradict them.
+              const sealed = atts.filter((a) => a.approved === null && !a.resolved).length;
+              const noShow = atts.filter((a) => a.approved === null && a.resolved).length;
               const expanded = open === p.address;
               return (
                 <Fragment key={p.address}>
@@ -273,6 +280,11 @@ export default function VerificationConsole() {
                             {sealed > 0 && (
                               <span className="ml-1.5 text-[10px] text-cyan-neon whitespace-nowrap">
                                 · {sealed} sealed
+                              </span>
+                            )}
+                            {noShow > 0 && (
+                              <span className="ml-1.5 text-[10px] text-magenta-neon whitespace-nowrap">
+                                · {noShow} never opened
                               </span>
                             )}
                           </>
