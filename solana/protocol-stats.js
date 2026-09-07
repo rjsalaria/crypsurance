@@ -22,6 +22,11 @@ const PROGRAM_ID = new PublicKey("4V7SWWpKRqFF5QZhPYKBMxHeEag3g2Cr1mhbtaSUjtdr")
 const TEAM = new Set([
   "9txXv5nFKu4E9AmykbcLGSRiyxM19C81HJqFmJbsBkxy", // treasury / oracle
   "7SEo9AVxa7gHYHvDXq9a2Zpj5MgDWK1eX5XhH6mUuxBD", // deploy authority
+  // Throwaway holder created during the M3 sprint to prove operator rewards,
+  // then to drive the deliberate-slash demo and the concurrency test. Three
+  // policies, all ours. It was being counted as an outside tester, which is
+  // precisely what this list exists to prevent.
+  "EgTxc1o47mPHg64s2j29HtttnsDkg5a3TZUbrjCjLXPt",
 ]);
 
 const POLICY_DISCRIMINATOR = [222, 135, 7, 163, 235, 177, 33, 68];
