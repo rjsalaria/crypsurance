@@ -30,7 +30,18 @@ const num = (name, fallback) =>
   process.env[name] === undefined ? fallback : Number(process.env[name]);
 const SLASH_BPS = num("SLASH_BPS", 1000); // 10% of stake, per wrong verdict
 const DISPUTE_WINDOW = num("DISPUTE_WINDOW", 86_400); // 24h to escalate a stall
-const COMMIT_WINDOW = num("COMMIT_WINDOW", 300); // 5m sealed
+// MUST exceed the interval between oracle runs, with margin.
+//
+// An operator can only commit while this window is open, and the window opens
+// when the claim is filed -- not when an operator first sees it. At 300s
+// against a 30-minute cadence, a run had to land inside a 5-minute slot out of
+// every 30, so roughly five claims in six were filed, never voted on, and
+// stranded at 0 approvals with no operator able to vote. That is what happened
+// to policy ErwHoQA8 on 8 September, filed by an outside tester.
+//
+// Raising this is also the repair: commit_closes is computed live from this
+// value, so a wider window reopens a claim whose window had already shut.
+const COMMIT_WINDOW = num("COMMIT_WINDOW", 2400); // 40m — cadence is 30m
 const REVEAL_WINDOW = num("REVEAL_WINDOW", 3_600); // 1h to open the envelope
 const REWARD_BPS = num("REWARD_BPS", 3000); // 30% of a premium, split across the set
 
@@ -102,6 +113,20 @@ const REWARD_BPS = num("REWARD_BPS", 3000); // 30% of a premium, split across th
   console.log("  dispute_window", DISPUTE_WINDOW);
   console.log("  commit_window ", COMMIT_WINDOW);
   console.log("  reveal_window ", REVEAL_WINDOW);
+
+  // The one invariant worth refusing on: a commit window shorter than the gap
+  // between oracle runs means most claims can never be voted on at all.
+  const ORACLE_CADENCE = 1800; // cron */30 in .github/workflows/oracle.yml
+  if (COMMIT_WINDOW <= ORACLE_CADENCE) {
+    console.log();
+    console.log(`WARNING: commit_window ${COMMIT_WINDOW}s is not longer than the`);
+    console.log(`${ORACLE_CADENCE}s oracle cadence. Claims filed between runs will`);
+    console.log("strand with no operator able to vote on them.");
+    if (APPLY && !process.argv.includes("--force")) {
+      console.log("Refusing to write. Pass --force if this is deliberate.");
+      process.exit(1);
+    }
+  }
 
   if (!APPLY) {
     console.log("\ndry run — pass --apply to write");
