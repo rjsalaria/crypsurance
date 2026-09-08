@@ -1,0 +1,13 @@
+{
+  "name": "CrypSurance",
+  "symbol": "SURETY",
+  "description": "SURETY is the utility token of CrypSurance — a decentralized, membership-based cover protocol on Solana. It powers governance, staking-to-underwrite, verification, and member fee discounts. Fixed supply of 1,000,000,000; mint and freeze authorities revoked at creation.",
+  "image": "https://crypsurance.io/token-logo.png",
+  "external_url": "https://crypsurance.io",
+  "attributes": [
+    { "trait_type": "Total Supply", "value": "1,000,000,000 (fixed)" },
+    { "trait_type": "Chain", "value": "Solana" },
+    { "trait_type": "Mint Authority", "value": "Revoked" },
+    { "trait_type": "Freeze Authority", "value": "Revoked" }
+  ]
+}
